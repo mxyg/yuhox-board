@@ -217,21 +217,25 @@ function startFileWatch(file) {
   stopFileWatch();
   if (!file || !fs.existsSync(file)) throw new Error('文件不存在：' + file);
   fileWatchPath = file;
+  let lastMtime = 0;
+
   const onChange = () => {
     clearTimeout(fileWatchDebounce);
-    fileWatchDebounce = setTimeout(() => applyFileWatch(), 400);
+    fileWatchDebounce = setTimeout(() => {
+      const changed = applyFilePatch(fileWatchPath, true);
+      if (changed) broadcastStatus();
+    }, 300);
   };
-  function applyFileWatch() {
-    const changed = applyFileWatchInner();
-    if (changed) broadcastStatus();
-  }
-  function applyFileWatchInner() {
-    try { return applyFilePatch(fileWatchPath, true); } catch (_) { return false; }
-  }
-  fileWatcher = fs.watch(file, onChange);
-  fileWatcher.on('error', () => { stopFileWatch(); broadcastStatus(); });
+
+  // 用轮询而不是 fs.watch：Windows 上编辑器保存常是「写临时文件再替换」，
+  // inode 换了以后 fs.watch 就哑了；watchFile 只看 mtime/size，替换也跟得住。
+  fs.watchFile(file, { interval: 500 }, (curr, prev) => {
+    if (curr.mtimeMs !== prev.mtimeMs || curr.size !== prev.size) onChange();
+  });
+  fileWatcher = { close: () => fs.unwatchFile(file) };
+
   // 先立即吃一次文件内容
-  applyFileWatchInner();
+  applyFilePatch(file, true);
   broadcastBoard();
 }
 

@@ -47,6 +47,11 @@ function forwardToPreview(boardData) {
   }
 }
 
+// 预览 iframe 加载完成后先灌一次当前看板，不必等第一次改动
+$('#previewFrame').addEventListener('load', () => {
+  if (board) forwardToPreview(board);
+});
+
 /* ───────── 导航 ───────── */
 
 const PANEL_TITLES = {
@@ -398,4 +403,5 @@ if (window.ResizeObserver) {
   renderDisplays();
   renderStatus();
   fitPreview();
+  forwardToPreview(board);
 })();

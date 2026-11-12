@@ -1,5 +1,7 @@
 node_modules/
 release/
+release-t1/
+.licgen-data/
 dist/
 out/
 test/*.png
