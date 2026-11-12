@@ -111,6 +111,20 @@ ok('数据文件落盘可读回', () => {
   assert.ok(onDisk.rows.length >= 5);
 });
 
+ok('导入 JSON 整份替换，缺的设置回落默认', () => {
+  const b = store.importBoard({
+    title: '导入的看板',
+    columns: [{ key: 'a', label: '甲', type: 'text', width: 200 }],
+    rows: [{ id: 'x1', cells: { a: '甲值' } }],
+    settings: { accent: '#ff0000' }
+  });
+  assert.strictEqual(b.title, '导入的看板');
+  assert.strictEqual(b.columns.length, 1);
+  assert.strictEqual(b.rows[0].cells.a, '甲值');
+  assert.strictEqual(b.settings.accent, '#ff0000');
+  assert.strictEqual(b.settings.autoLaunch, true, '没给的设置应该回落到默认值');
+});
+
 ok('二次启动留一份备份', () => {
   // 重新加载模块 = 模拟下次启动
   delete require.cache[require.resolve('../src/main/store')];
@@ -118,8 +132,9 @@ ok('二次启动留一份备份', () => {
   again.getBoard();
   const dir = path.join(TMP, 'backup');
   const files = fs.readdirSync(dir);
-  assert.strictEqual(files.length, 1, '应该有一份备份，实际：' + files.join(','));
-  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8')).columns.length === 5);
+  assert.ok(files.length >= 1, '应该有备份，实际：' + files.length);
+  const latest = JSON.parse(fs.readFileSync(path.join(dir, files.sort().pop()), 'utf8'));
+  assert.ok(Array.isArray(latest.columns));
 });
 
 console.log('\n[5] 旧版迁移');

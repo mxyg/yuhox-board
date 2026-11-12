@@ -128,6 +128,11 @@ function autoLaunchState() {
   };
 }
 
+/** 便携版要指向用户双击的那个 exe：process.execPath 是解包后的临时副本，重启就没了 */
+function launchTarget() {
+  return process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+}
+
 /** 把开关写进注册表（Windows Run / macOS 登录项）；开发态只记录不落系统 */
 function applyAutoLaunch(enabled) {
   if (!AUTOLAUNCH_PLATFORM || !app.isPackaged) return false;
@@ -135,7 +140,7 @@ function applyAutoLaunch(enabled) {
     const opts = { openAtLogin: !!enabled };
     if (process.platform === 'win32') {
       // 安装版 / 便携版都显式给路径，避免 Electron 默认指向 electron.exe
-      opts.path = process.execPath;
+      opts.path = launchTarget();
       opts.args = ['--hidden'];
     } else {
       opts.openAsHidden = true;
@@ -232,16 +237,16 @@ function applyJumpList() {
     app.setAppUserModelId('com.yuhox.board');
     app.setUserTasks([
       {
-        program: process.execPath, arguments: '', title: '显示控制台',
-        description: '打开 Yuhox Board 控制台', iconPath: process.execPath, iconIndex: 0
+        program: launchTarget(), arguments: '', title: '显示控制台',
+        description: '打开 Yuhox Board 控制台', iconPath: launchTarget(), iconIndex: 0
       },
       {
-        program: process.execPath, arguments: '--hidden --output', title: '直接上屏',
-        description: '后台启动并推送到上次的大屏', iconPath: process.execPath, iconIndex: 0
+        program: launchTarget(), arguments: '--hidden --output', title: '直接上屏',
+        description: '后台启动并推送到上次的大屏', iconPath: launchTarget(), iconIndex: 0
       },
       {
-        program: process.execPath, arguments: '--hidden', title: '仅托盘待命',
-        description: '不弹窗，只留右下角托盘', iconPath: process.execPath, iconIndex: 0
+        program: launchTarget(), arguments: '--hidden', title: '仅托盘待命',
+        description: '不弹窗，只留右下角托盘', iconPath: launchTarget(), iconIndex: 0
       }
     ]);
   } catch (e) {
@@ -339,6 +344,7 @@ function buildTrayMenu() {
   ];
 
   tray.setContextMenu(Menu.buildFromTemplate(template));
+  tray.setToolTip('Yuhox Board · ' + (hasOutput ? (blacked ? '黑屏待机' : '大屏输出中') : '未上屏'));
 }
 
 function showControlWindow() {
@@ -585,6 +591,24 @@ function ipc() {
     broadcastBoard();
     broadcastStatus();
     return b;
+  });
+  ipcMain.handle('data:import', async () => {
+    const { dialog } = require('electron');
+    const r = await dialog.showOpenDialog(controlWin, {
+      title: '导入看板 JSON（覆盖当前数据）',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile']
+    });
+    if (r.canceled) return null;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
+      const b = store.importBoard(Array.isArray(parsed) ? { rows: parsed } : parsed);
+      broadcastBoard();
+      broadcastStatus();
+      return { path: r.filePaths[0], name: path.basename(r.filePaths[0]), board: b };
+    } catch (e) {
+      return { error: e.message };
+    }
   });
 
   ipcMain.handle('server:start', async (_e, port) => {

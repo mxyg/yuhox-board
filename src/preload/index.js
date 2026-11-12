@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('yuhox', {
   // 数据文件
   openDataDir: () => ipcRenderer.invoke('data:open'),
   resetBoard: (kind) => ipcRenderer.invoke('data:reset', kind),
+  importBoard: () => ipcRenderer.invoke('data:import'),
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
 
   // 输入历史（自动补全）

@@ -248,29 +248,32 @@ function backupOnce(raw) {
   }
 }
 
+/** 把任意来源的看板对象规范成完整 v2 结构（读文件、导入备份都走这里） */
+function fromParsed(parsed) {
+  if (!isV2(parsed)) return migrateLegacy(parsed || {});
+  const base = sampleBoard();
+  const b = {
+    version: 2,
+    title: typeof parsed.title === 'string' ? parsed.title.slice(0, 60) : base.title,
+    subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle.slice(0, 80) : base.subtitle,
+    updatedAt: Number(parsed.updatedAt) || 0,
+    columns: normalizeColumns(parsed.columns),
+    rows: [],
+    dict: normalizeDict(parsed.dict),
+    settings: Object.assign(base.settings, parsed.settings || {})
+  };
+  b.rows = pruneCells(normalizeRows(parsed.rows, b.columns) || [], b.columns);
+  return b;
+}
+
 function load() {
   if (board) return board;
   try {
     const raw = fs.readFileSync(FILE(), 'utf8');
     backupOnce(raw);
     const parsed = JSON.parse(raw);
-    if (isV2(parsed)) {
-      const base = sampleBoard();
-      board = {
-        version: 2,
-        title: typeof parsed.title === 'string' ? parsed.title.slice(0, 60) : base.title,
-        subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle.slice(0, 80) : base.subtitle,
-        updatedAt: Number(parsed.updatedAt) || 0,
-        columns: normalizeColumns(parsed.columns),
-        rows: [],
-        dict: normalizeDict(parsed.dict),
-        settings: Object.assign(base.settings, parsed.settings || {})
-      };
-      board.rows = pruneCells(normalizeRows(parsed.rows, board.columns) || [], board.columns);
-    } else {
-      board = migrateLegacy(parsed || {});
-      saveNow();
-    }
+    board = fromParsed(parsed);
+    if (!isV2(parsed)) saveNow();   // 旧版迁移后立刻落盘
   } catch (e) {
     board = sampleBoard();
     saveNow();
@@ -426,6 +429,15 @@ function getSettings() {
   return Object.assign({}, board.settings);
 }
 
+/** 从备份 / 别处拷来的 JSON 整份替换当前看板 */
+function importBoard(parsed) {
+  load();
+  board = fromParsed(parsed);
+  board.updatedAt = Date.now();
+  saveNow();
+  return clone(board);
+}
+
 /** 恢复到出厂示例 / 清空数据（列结构与设置保留） */
 function resetBoard(kind) {
   load();
@@ -454,6 +466,7 @@ function exportPath() {
 
 module.exports = {
   load, save, saveNow, getBoard, getSettings, updateBoard, replaceBoard, resetBoard,
+  importBoard,
   addDict, addDictMany, sampleBoard, defaultColumns, defaultRows,
   FILE, isPortable, dataDir, backupDir
 };

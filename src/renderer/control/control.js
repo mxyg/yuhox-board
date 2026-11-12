@@ -1157,8 +1157,19 @@ $('#btnOpenData').addEventListener('click', async () => {
   if (err) toast('打不开目录：' + err);
 });
 
-$('#btnSample').addEventListener('click', async () => {
-  if (!confirm('用示例数据覆盖当前所有行？会立刻同步到大屏。')) return;
+$('#btnImportJson').addEventListener('click', async () => {
+  const r = await window.yuhox.importBoard();
+  if (!r) return;
+  if (r.error) { toast('导入失败：' + r.error); return; }
+  board = r.board;
+  renderBoardTexts();
+  renderEditor();
+  renderSettings();
+  renderMobile();
+  toast('已导入：' + r.name);
+});
+
+$('#btnSample').addEventListener('click', async () => {  if (!confirm('用示例数据覆盖当前所有行？会立刻同步到大屏。')) return;
   board = await window.yuhox.resetBoard('sample');
   renderBoardTexts();
   renderEditor();
