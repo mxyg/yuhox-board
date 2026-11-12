@@ -1,5 +1,7 @@
 # Yuhox Board · 昱弘看板
 
+![build](https://github.com/mxyg/yuhox-board/actions/workflows/build-windows.yml/badge.svg)
+
 **一块大屏，实时数据，一眼看完。**
 
 开源免费的实时屏幕数据动态显示软件。控制台留在主屏，画面全屏钉到你指定的任意一块显示器上；任务进度、产线节拍、交付状态，改一个字、推一条数据，大屏立刻跟着动。
