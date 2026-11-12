@@ -8,7 +8,7 @@
 - 许可：MIT，商用免费，可二次开发
 - 依赖：无服务端、无账号、无联网要求，素材与数据全部本地
 
-![大屏泳道看板](docs/images/screen-columns.png)
+![大屏泳道看板](docs/images/screen-columns.jpg)
 
 ## 它能做什么
 
@@ -21,7 +21,7 @@
 | 现场可用性 | 黑屏待机、显示器热插拔自动回落、上屏期间阻止熄屏、断网照常运行 |
 | 数据本地化 | 看板数据保存在本机用户目录，重启不丢，可导出 JSON 留档 |
 
-![控制台](docs/images/control.png)
+![控制台](docs/images/control.jpg)
 
 ## 快速开始
 
