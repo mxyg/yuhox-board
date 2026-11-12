@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1020" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Yuhox Board · 手机遥控</title>
+<style>
+  :root {
+    --bg: #080c16;
+    --panel: #111a2c;
+    --panel2: #16223a;
+    --line: rgba(148, 170, 220, 0.16);
+    --txt: #e8eefc;
+    --dim: #8fa0bd;
+    --accent: #4f8cff;
+    --accent2: #22d3ee;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse 90% 50% at 50% -10%, rgba(79, 140, 255, .18), transparent 60%),
+      var(--bg);
+    color: var(--txt);
+    font: 15px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 顶栏 ── */
+  .top {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    background: rgba(8, 12, 22, .86);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 13px; color: #05101f; letter-spacing: .5px;
+  }
+  .top h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  .top .sub { font-size: 11px; color: var(--dim); margin-top: 1px; }
+  .dot-live {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--ok);
+    background: rgba(52, 211, 153, .12);
+    border: 1px solid rgba(52, 211, 153, .3);
+    padding: 5px 10px; border-radius: 999px;
+  }
+  .dot-live i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .dot-live.off { color: #fb7185; background: rgba(251, 113, 133, .12); border-color: rgba(251, 113, 133, .3); }
+
+  /* ── 标题卡 ── */
+  .titles { padding: 14px 16px 4px; }
+  .titles details {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .titles summary {
+    padding: 13px 15px; font-size: 13px; color: var(--dim);
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  }
+  .titles summary::-webkit-details-marker { display: none; }
+  .titles summary::after { content: "▾"; margin-left: auto; transition: transform .2s; }
+  .titles details[open] summary::after { transform: rotate(180deg); }
+  .titles .body { padding: 0 15px 15px; display: grid; gap: 10px; }
+  .field { display: grid; gap: 6px; }
+  .field span { font-size: 12px; color: var(--dim); }
+  input[type="text"], input[type="password"] {
+    width: 100%; padding: 12px 13px; font-size: 15px;
+    color: var(--txt); background: #0d1524;
+    border: 1px solid var(--line); border-radius: 10px;
+    outline: none; font-family: inherit;
+  }
+  input[type="text"]:focus, input[type="password"]:focus {
+    border-color: rgba(79, 140, 255, .7);
+    box-shadow: 0 0 0 3px rgba(79, 140, 255, .14);
+  }
+
+  /* ── 行列表 ── */
+  .list { padding: 10px 16px 0; display: grid; gap: 12px; }
+  .empty { text-align: center; color: var(--dim); padding: 48px 20px; font-size: 14px; }
+
+  .row {
+    background: linear-gradient(180deg, var(--panel), var(--panel2));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 13px 14px 15px;
+    position: relative;
+    overflow: hidden;
+  }
+  .row::before {
+    content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
+    background: var(--st, var(--accent)); border-radius: 0 3px 3px 0; opacity: .9;
+  }
+  .row.saving { border-color: rgba(79, 140, 255, .5); }
+  .row.saved { animation: okFlash .8s ease; }
+  @keyframes okFlash {
+    0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .45); }
+    100% { box-shadow: 0 0 0 14px rgba(52, 211, 153, 0); }
+  }
+  .row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .idx {
+    min-width: 24px; height: 24px; padding: 0 7px; border-radius: 7px;
+    background: rgba(79, 140, 255, .16); color: #9dc0ff;
+    font-size: 12px; font-weight: 700; display: grid; place-items: center;
+  }
+  .row-head .badge {
+    margin-left: auto; font-size: 12px; font-weight: 650;
+    color: var(--st, var(--accent));
+  }
+
+  .cells { display: grid; gap: 10px; }
+  .cell { display: grid; gap: 5px; }
+  .cell label { font-size: 11.5px; color: var(--dim); letter-spacing: .2px; }
+  .cell input { padding: 11px 12px; font-size: 15px; }
+
+  /* 进度控件 */
+  .prog { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+  .prog button {
+    width: 48px; height: 46px; flex: 0 0 auto;
+    border-radius: 11px; border: 1px solid var(--line);
+    background: #0d1524; color: var(--txt);
+    font-size: 20px; font-weight: 600; font-family: inherit;
+    display: grid; place-items: center;
+  }
+  .prog button:active { background: #1a2740; transform: scale(.96); }
+  .prog .val {
+    flex: 1; text-align: center; font-size: 22px; font-weight: 750;
+    font-variant-numeric: tabular-nums; letter-spacing: .5px;
+  }
+  .bar { height: 6px; border-radius: 99px; background: rgba(148, 170, 220, .16); overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .25s; }
+  .prog .done {
+    width: auto; padding: 0 13px; font-size: 13px; font-weight: 600; color: var(--ok);
+    border-color: rgba(52, 211, 153, .35); background: rgba(52, 211, 153, .1);
+  }
+
+  /* ── 底部提示 ── */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom));
+    transform: translate(-50%, 16px); opacity: 0; pointer-events: none;
+    background: rgba(20, 30, 50, .96); border: 1px solid var(--line);
+    color: var(--txt); font-size: 13px; padding: 10px 18px; border-radius: 999px;
+    transition: .22s; z-index: 60; max-width: 86vw; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { border-color: rgba(251, 113, 133, .5); color: #ffc4cd; }
+
+  /* ── 口令遮罩 ── */
+  .mask {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(6, 9, 16, .92); backdrop-filter: blur(8px);
+    display: none; place-items: center; padding: 24px;
+  }
+  .mask.show { display: grid; }
+  .pin-card {
+    width: 100%; max-width: 340px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px 20px;
+    text-align: center;
+  }
+  .pin-card h2 { margin: 4px 0 6px; font-size: 17px; }
+  .pin-card p { margin: 0 0 16px; font-size: 12.5px; color: var(--dim); }
+  .pin-card input { text-align: center; letter-spacing: 8px; font-size: 20px; }
+  .pin-card button {
+    width: 100%; margin-top: 12px; padding: 13px; border-radius: 11px; border: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #04101f; font-size: 15px; font-weight: 700; font-family: inherit;
+  }
+  .pin-err { color: #fb7185; font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="logo">YB</div>
+  <div>
+    <h1>现场遥控</h1>
+    <div class="sub" id="subLine">连接中…</div>
+  </div>
+  <span class="dot-live" id="liveBadge"><i></i>已连接</span>
+</header>
+
+<div class="titles">
+  <details>
+    <summary>标题设置</summary>
+    <div class="body">
+      <label class="field"><span>主标题</span><input type="text" id="inpTitle" maxlength="60" placeholder="施工动态总览" /></label>
+      <label class="field"><span>副标题</span><input type="text" id="inpSub" maxlength="80" placeholder="现场实时进度" /></label>
+    </div>
+  </details>
+</div>
+
+<main class="list" id="list">
+  <div class="empty">正在读取大屏数据…</div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<div class="mask" id="pinMask">
+  <div class="pin-card">
+    <div class="logo" style="margin:0 auto 10px">YB</div>
+    <h2>需要访问口令</h2>
+    <p>控制台里设置了手机遥控口令</p>
+    <input type="password" id="inpPin" inputmode="numeric" maxlength="12" placeholder="••••" />
+    <button id="btnPin">进入</button>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const $ = (s) => document.querySelector(s);
+let board = null;
+let pin = localStorage.getItem('yb-pin') || '';
+let saveTimer = null;
+let pending = null;          // { id, cells }
+let toastTimer = null;
+let quietUntil = 0;
+
+/* ───────── 小工具 ───────── */
+
+function toast(msg, isErr) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2200);
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function visibleCols() {
+  if (!board || !Array.isArray(board.columns)) return [];
+  return board.columns.filter((c) => c.visible !== false);
+}
+
+function statusColor(p) {
+  if (p >= 100) return 'var(--ok)';
+  if (p <= 0) return '#7c89a6';
+  return 'var(--accent)';
+}
+
+/* ───────── 网络 ───────── */
+
+async function api(path, opts) {
+  const o = Object.assign({ headers: {} }, opts || {});
+  o.headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers);
+  if (pin) o.headers['x-board-pin'] = pin;
+  const res = await fetch(path, o);
+  if (res.status === 401) { showPin(); throw new Error('unauthorized'); }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || ('HTTP ' + res.status));
+  return json.data !== undefined ? json.data : json;
+}
+
+async function pull(showToast) {
+  try {
+    const b = await api('/api/board');
+    applyBoard(b);
+    setLive(true);
+    if (showToast) toast('已是最新');
+  } catch (e) {
+    if (e.message !== 'unauthorized') setLive(false);
+  }
+}
+
+function setLive(on) {
+  const el = $('#liveBadge');
+  el.className = 'dot-live' + (on ? '' : ' off');
+  el.innerHTML = '<i></i>' + (on ? '已连接' : '已断开');
+  $('#subLine').textContent = on
+    ? (board && board.title ? board.title : '已连接大屏')
+    : '连不上，检查手机与电脑是否同一 Wi-Fi';
+}
+
+/* ───────── 渲染 ───────── */
+
+function applyBoard(b) {
+  board = b;
+  $('#inpTitle').value = b.title || '';
+  $('#inpSub').value = b.subtitle || '';
+  renderRows();
+  setLive(true);
+}
+
+function renderRows() {
+  const cols = visibleCols();
+  const textCols = cols.filter((c) => c.type !== 'index' && c.type !== 'progress');
+  const progCol = cols.find((c) => c.type === 'progress');
+  const list = $('#list');
+  const rows = (board && board.rows) || [];
+
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty">还没有数据<br>在控制台里新增一行，这里就能直接改</div>';
+    return;
+  }
+
+  // 避免打断正在输入的字段
+  const active = document.activeElement;
+  const focusedKey = active && active.dataset ? active.dataset.focusKey : null;
+  const caret = active && active.selectionStart;
+
+  list.innerHTML = rows.map((r, i) => {
+    const cells = r.cells || {};
+    const pv = progCol ? Number(cells[progCol.key]) || 0 : 0;
+    const fields = textCols.map((c) => `
+      <div class="cell">
+        <label>${esc(c.label)}</label>
+        <input type="text" data-id="${esc(r.id)}" data-key="${esc(c.key)}"
+               data-focus-key="${esc(r.id + ':' + c.key)}"
+               value="${esc(cells[c.key])}" placeholder="${esc(c.label)}" />
+      </div>`).join('');
+
+    return `
+      <section class="row" data-row="${esc(r.id)}" style="--st:${progCol ? statusColor(pv) : 'var(--accent)'}">
+        <div class="row-head">
+          <span class="idx">${i + 1}</span>
+          <span class="badge">${progCol ? pv + '%' : ''}</span>
+        </div>
+        <div class="cells">${fields}</div>
+        ${progCol ? `
+        <div class="cell" style="margin-top:10px">
+          <label>${esc(progCol.label)}</label>
+          <div class="prog">
+            <button data-step="-10" data-id="${esc(r.id)}" data-key="${esc(progCol.key)}" aria-label="减十">−</button>
+            <div class="val" data-val="${esc(r.id)}">${pv}<span style="font-size:13px">%</span></div>
+            <button data-step="10" data-id="${esc(r.id)}" data-key="${esc(progCol.key)}" aria-label="加十">+</button>
+            <button class="done" data-step="done" data-id="${esc(r.id)}" data-key="${esc(progCol.key)}">完成</button>
+          </div>
+          <div class="bar"><i data-bar="${esc(r.id)}" style="width:${pv}%"></i></div>
+        </div>` : ''}
+      </section>`;
+  }).join('');
+
+  // 还原焦点与光标，避免轮询刷新把输入打断
+  if (focusedKey) {
+    const el = document.querySelector(`[data-focus-key="${CSS.escape(focusedKey)}"]`);
+    if (el) {
+      el.focus();
+      if (caret != null && el.setSelectionRange) {
+        try { el.setSelectionRange(caret, caret); } catch (_) {}
+      }
+    }
+  }
+}
+
+/* ───────── 保存 ───────── */
+
+function markSaving(id, on, ok) {
+  const row = document.querySelector(`.row[data-row="${CSS.escape(id)}"]`);
+  if (!row) return;
+  row.classList.toggle('saving', !!on);
+  if (ok) {
+    row.classList.add('saved');
+    setTimeout(() => row.classList.remove('saved'), 800);
+  }
+}
+
+/** 合并同一行的连续修改，350ms 发一次 */
+function queuePatch(id, key, value) {
+  if (!pending || pending.id !== id) pending = { id, cells: {} };
+  pending.cells[key] = value;
+  markSaving(id, true);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, 350);
+}
+
+async function flush() {
+  const p = pending;
+  pending = null;
+  if (!p) return;
+  quietUntil = Date.now() + 900;   // 刚保存完别立刻拉取覆盖
+  try {
+    await api('/api/board', { method: 'POST', body: JSON.stringify({ rowPatch: p }) });
+    markSaving(p.id, false, true);
+  } catch (e) {
+    markSaving(p.id, false, false);
+    if (e.message !== 'unauthorized') toast('保存失败：' + e.message, true);
+  }
+}
+
+/* ───────── 事件 ───────── */
+
+$('#list').addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.dataset || !el.dataset.key) return;
+  queuePatch(el.dataset.id, el.dataset.key, el.value);
+});
+
+$('#list').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-step]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const key = btn.dataset.key;
+  const row = (board.rows || []).find((r) => r.id === id);
+  if (!row) return;
+  const cur = Number(row.cells[key]) || 0;
+  const step = btn.dataset.step;
+  const next = step === 'done' ? 100 : Math.max(0, Math.min(100, cur + Number(step)));
+
+  // 先本地反馈，再排队保存
+  row.cells[key] = next;
+  const valEl = document.querySelector(`[data-val="${CSS.escape(id)}"]`);
+  if (valEl) valEl.innerHTML = next + '<span style="font-size:13px">%</span>';
+  const barEl = document.querySelector(`[data-bar="${CSS.escape(id)}"]`);
+  if (barEl) barEl.style.width = next + '%';
+  const rowEl = document.querySelector(`.row[data-row="${CSS.escape(id)}"]`);
+  if (rowEl) {
+    rowEl.style.setProperty('--st', statusColor(next));
+    const badge = rowEl.querySelector('.badge');
+    if (badge) badge.textContent = next + '%';
+  }
+  if (navigator.vibrate) navigator.vibrate(8);
+  queuePatch(id, key, next);
+});
+
+function debounceTitle(field) {
+  let t = null;
+  return (e) => {
+    const v = e.target.value;
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try {
+        await api('/api/board', { method: 'POST', body: JSON.stringify({ [field]: v }) });
+        toast('标题已同步');
+        $('#subLine').textContent = $('#inpTitle').value || '已连接大屏';
+      } catch (err) {
+        if (err.message !== 'unauthorized') toast('保存失败', true);
+      }
+    }, 450);
+  };
+}
+$('#inpTitle').addEventListener('input', debounceTitle('title'));
+$('#inpSub').addEventListener('input', debounceTitle('subtitle'));
+
+/* ───────── 口令 ───────── */
+
+function showPin() {
+  $('#pinMask').classList.add('show');
+  setTimeout(() => $('#inpPin').focus(), 120);
+}
+
+$('#btnPin').addEventListener('click', async () => {
+  const v = $('#inpPin').value.trim();
+  if (!v) return;
+  pin = v;
+  localStorage.setItem('yb-pin', pin);
+  $('#pinErr').textContent = '';
+  try {
+    await pull();
+    $('#pinMask').classList.remove('show');
+    toast('已连接');
+  } catch (e) {
+    $('#pinErr').textContent = '口令不对，再试一次';
+  }
+});
+$('#inpPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnPin').click(); });
+
+/* ───────── 启动 ───────── */
+
+pull();
+// 每 8 秒同步一次；正在输入或刚保存时不打断
+setInterval(() => {
+  if (document.hidden) return;
+  if (Date.now() < quietUntil) return;
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
+  if (pending) return;
+  pull();
+}, 8000);
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pull(); });
+</script>
+</body>
+</html>

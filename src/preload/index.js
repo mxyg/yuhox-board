@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld('yuhox', {
   // 开机自启 / 托盘
   getAutoLaunch: () => ipcRenderer.invoke('autolaunch:get'),
   setAutoLaunch: (v) => ipcRenderer.invoke('autolaunch:set', v),
+  setPrefs: (p) => ipcRenderer.invoke('prefs:set', p),
+
+  // 数据文件
+  openDataDir: () => ipcRenderer.invoke('data:open'),
+  resetBoard: (kind) => ipcRenderer.invoke('data:reset', kind),
+  openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
 
   // 输入历史（自动补全）
   addDict: (key, value) => ipcRenderer.invoke('dict:add', { key, value }),

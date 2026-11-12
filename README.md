@@ -19,13 +19,14 @@
 | 指定显示器上屏 | 枚举所有显示器，选一块全屏输出；控制台仍在主屏，边改边看 |
 | 列完全自定义 | 列头可改名、可拖拽调序、鼠标拖列缝调列宽、可增可删；序号列自动编号 |
 | 单元格类型 | 文本列 + 进度列（输入 0–100，大屏自动画进度条并按完成度标色） |
+| 手机遥控 | 同一 Wi-Fi 下手机浏览器打开即用，改动态、拖进度、改标题，无需装 App，可设口令 |
 | 三种实时数据通道 | 控制台手动编辑 / HTTP 接口推送 / JSON 文件监听，局域网任何机器都能推 |
 | 两种大屏版式 | 施工数据表（多列明细）、进度榜单（按进度排序） |
 | 输入自动补全 | 填过的队伍、工序、动态自动记进历史，下次输入即刻联想 |
 | Excel 互通 | 一键导出（表头与列宽一并导出）；导入按表头自动匹配列，陌生列自动新建 |
 | 动态视觉 | 粒子与极光背景、流光光束、雷达环、扫描线、HUD 边角、标题扫光、行变更闪烁 |
-| 长期驻留 | 开机自动启动（默认开）、托盘常驻、关窗不退出，大屏照常推送 |
-| 现场可用性 | 黑屏待机、显示器热插拔自动回落、上屏期间阻止熄屏、断网照常运行 |
+| 长期驻留 | 开机自动启动（默认开）、启动自动回到上次大屏、托盘常驻、关窗不退出 |
+| 现场可用性 | 黑屏待机、全局快捷键、显示器热插拔自动回落、上屏期间阻止熄屏、断网照常运行 |
 
 主标题、副标题随时可改，控制台顶部和大屏左侧两个输入框任选其一，改完即刻同步。
 
@@ -47,6 +48,26 @@
 4. 「看板内容」里逐格编辑数据，大屏实时跟随。
 
 装完默认已开启「开机自动启动」：之后开机程序在右下角托盘待命，双击托盘图标唤出控制台，右键托盘可直接切屏、黑屏、撤屏、退出。
+
+上过屏以后，下次启动会自动回到那块屏（可在「外观与动效」里关掉）；开机自启时也是同样行为，**开机即出画面**，控制台不弹窗。
+
+### 手机遥控（不用装 App）
+
+1. 控制台「实时数据源」里能看到一串地址，形如 `http://192.168.1.23:7788/m`
+2. 手机连同一个 Wi-Fi，浏览器打开这个地址
+3. 直接改：加/减 10% 进度、一键「完成」、改施工动态与队伍、改主副标题，改完立刻上大屏
+
+人多眼杂的现场建议在同一个卡片里设个 4–12 位口令，手机首次打开需要输入。推送接口默认随软件启动，端口可在同一页改。
+
+### 快捷键
+
+| 按键 | 作用 |
+|---|---|
+| `Ctrl + Alt + B` | 黑屏待机 / 恢复画面 |
+| `Ctrl + Alt + H` | 收起 / 唤出控制台 |
+| `Ctrl + Alt + S` | 上屏 / 撤下大屏 |
+
+快捷键全局生效（大屏全屏时也管用），可在设置里关闭；被别的软件占用时会自动跳过。
 
 ### 从源码运行
 
@@ -89,9 +110,17 @@ curl -X POST http://192.168.1.10:7788/api/board \
 # 读取当前看板
 curl http://192.168.1.10:7788/api/board
 
+# 只改某一行的一个单元格（手机遥控走的就是这条，不会覆盖别处改动）
+curl -X POST http://192.168.1.10:7788/api/board \
+  -H 'Content-Type: application/json' \
+  -d '{ "rowPatch": { "id": "r1", "cells": { "prog": 88 } } }'
+
 # 健康检查
 curl http://192.168.1.10:7788/api/health
 ```
+
+手机遥控页：浏览器打开 `http://192.168.1.10:7788/m`（`/` 会自动跳过去）。
+设了口令后，接口需要带 `x-board-pin` 请求头或 `?pin=xxxx`。
 
 `rows` 里的键就是列 `key`（默认 `team` / `act` / `prog` / `proc`，`idx` 为自动序号列）。
 `prog` 为 0–100 的整数，非数字会被清洗后钳到区间内。
@@ -144,7 +173,13 @@ await fetch('http://192.168.1.10:7788/api/board', {
     "autoScroll": true,
     "scrollSpeed": 36,
     "layout": "table",
+    "fontScale": 1,
     "autoLaunch": true,
+    "autoRestoreOutput": true,
+    "lastDisplayId": 2,
+    "hotkeys": true,
+    "serverAuto": true,
+    "mobilePin": "",
     "tickers": ["每周五 17:00 例会同步进度"]
   }
 }
@@ -153,8 +188,23 @@ await fetch('http://192.168.1.10:7788/api/board', {
 - `columns[].type`：`index`（自动序号）/ `text` / `progress`。
 - `columns[].width` 为设计宽度，控制台与大屏按同一比例分配，拖列宽两边同步。
 - `layout`：`table` 施工数据表 / `list` 进度榜单。`tickers` 为底部滚动字幕，每行一条。
+- `fontScale`：大屏字号缩放，0.8–1.5。
+- `autoRestoreOutput` + `lastDisplayId`：启动后自动回到上次上屏的那块屏。
+- `hotkeys` / `serverAuto`：全局快捷键、推送接口随软件启动。
+- `mobilePin`：手机遥控口令，空字符串表示不校验。
 - `dict` 是输入历史，控制台自动维护，也可用接口写入更多候选值。
 - 旧版 `tasks` 数据在首次启动时自动迁移成默认五列，不丢内容。
+
+## 数据与备份
+
+| 运行方式 | 数据位置 |
+|---|---|
+| 安装版 | `%APPDATA%\yuhox-board\board.json` |
+| 便携版 | `exe 同目录\YuhoxBoardData\board.json` |
+
+- 每次启动自动备份到同级 `backup\` 目录，半小时内不重复、最多保留 5 份，误改可从这里捞回。
+- 便携版整个文件夹拷到另一台电脑就能接着用，数据、列结构、口令一起带走。
+- 控制台「外观与动效 → 数据与维护」里能看到当前路径，也能一键打开目录、恢复示例数据或清空数据。
 
 ## 技术架构
 
@@ -180,21 +230,28 @@ await fetch('http://192.168.1.10:7788/api/board', {
 ## 目录
 
 ```
-src/main/index.js      主进程：窗口、显示器、托盘、开机自启、IPC、文件监听
-src/main/store.js      看板状态、规范化与迁移、持久化
-src/main/server.js     HTTP 推送接口
+src/main/index.js      主进程：窗口、显示器、托盘、快捷键、开机自启、IPC、文件监听
+src/main/store.js      看板状态、规范化与迁移、持久化与备份
+src/main/server.js     HTTP 推送接口 + 手机遥控页路由
+src/main/mobile.html   手机遥控页（单文件，无外部依赖）
 src/main/excel.js      Excel / CSV 导入导出
 src/preload/index.js   contextBridge 白名单
-src/renderer/control   控制台（数据表编辑器、列设置、外观）
+src/renderer/control   控制台（数据表编辑器、列设置、外观、数据维护）
 src/renderer/output    大屏（表格 / 榜单、装饰动效）
 test/smoke.js          渲染冒烟测试（截图）
 test/e2e.mjs           端到端测试（CDP 驱动）
+test/store-test.cjs    数据层测试（无需窗口）
+test/server-test.cjs   HTTP 接口测试（无需窗口）
+test/ui-ids-test.cjs   界面 id 引用一致性检查
 test/excel-test.mjs    Excel 往返测试
 ```
 
 ## 测试
 
 ```bash
+# 无窗口测试（数据层 / HTTP 接口 / 界面 id），CI 里也跑这一套
+npm test
+
 # 冒烟：渲染两个界面并截图到 docs/images/
 npx electron test/smoke.js
 
@@ -213,7 +270,7 @@ node test/excel-test.mjs
 npm run dist:win
 
 # 走公司运维台一键发布（编译台构建）
-node ai.mjs release board --version 1.1.0 --notes "可变列 + Excel + 托盘" --wait
+node ai.mjs release board --version 1.2.0 --notes "手机遥控 + 开机即出画面" --wait
 ```
 
 ## 许可

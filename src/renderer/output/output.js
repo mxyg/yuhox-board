@@ -48,6 +48,9 @@ function applyTheme(s) {
   root.style.setProperty('--ob-accent', s.accent || '#4f8cff');
   root.style.setProperty('--ob-accent2', s.accent2 || '#22d3ee');
   root.style.setProperty('--st-doing', s.accent || '#4f8cff');
+  // 大屏字号缩放：所有尺寸单位都由 --u 派生，改这一处整块屏同比例放大
+  const scale = Math.max(0.7, Math.min(1.6, Number(s.fontScale) || 1));
+  root.style.setProperty('--u', `calc(clamp(9px, 1.35vh, 22px) * ${scale})`);
 }
 
 /* ═════════ 时钟 ═════════ */

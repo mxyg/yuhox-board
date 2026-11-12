@@ -68,9 +68,21 @@ ipcMain.handle('status:get', () => ({
     workArea: { x: 0, y: 0, width: 1920, height: 1040 },
     scaleFactor: 2, size: '1920×1080'
   }],
-  server: { running: false, port: 7788 },
+  server: { running: true, port: 7788 },
   file: { watching: false, path: null },
-  version: '1.1.0'
+  autolaunch: { enabled: true, os: true, supported: true, platform: process.platform },
+  data: { file: '/Users/demo/Library/Application Support/yuhox-board/board.json', dir: '/Users/demo/Library/Application Support/yuhox-board', backupDir: '/Users/demo/Library/Application Support/yuhox-board/backup', portable: false },
+  lan: ['192.168.1.23'],
+  mobile: { pinRequired: false },
+  hotkeys: {
+    enabled: true,
+    active: [
+      { accel: 'CommandOrControl+Alt+B', label: 'Ctrl + Alt + B' },
+      { accel: 'CommandOrControl+Alt+H', label: 'Ctrl + Alt + H' },
+      { accel: 'CommandOrControl+Alt+S', label: 'Ctrl + Alt + S' }
+    ]
+  },
+  version: '1.2.0'
 }));
 
 function watch(win, tag) {

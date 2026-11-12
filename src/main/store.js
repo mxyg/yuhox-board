@@ -18,8 +18,18 @@ const fs = require('fs');
 const path = require('path');
 
 // 允许测试用独立数据文件，避免动到用户正在用的看板
-const FILE = () => process.env.YUHOX_BOARD_FILE ||
-  path.join(app.getPath('userData'), 'board.json');
+const FILE = () => {
+  if (process.env.YUHOX_BOARD_FILE) return process.env.YUHOX_BOARD_FILE;
+  // 便携版：数据放在 exe 同目录，整个文件夹拷到别的电脑就能继续用
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'YuhoxBoardData', 'board.json');
+  }
+  return path.join(app.getPath('userData'), 'board.json');
+};
+
+const isPortable = () => !!process.env.PORTABLE_EXECUTABLE_DIR;
+const dataDir = () => path.dirname(FILE());
+const backupDir = () => path.join(dataDir(), 'backup');
 
 const COLUMN_TYPES = ['index', 'text', 'progress'];
 const MAX_ROWS = 3000;
@@ -76,7 +86,13 @@ function sampleBoard() {
       autoScroll: true,
       scrollSpeed: 36,          // px/s，内容溢出时的自动滚动速度
       layout: 'table',          // table(施工数据表) | list(进度榜单)
+      fontScale: 1,             // 大屏字号缩放
       autoLaunch: true,         // 开机自动启动（默认开）
+      autoRestoreOutput: true,  // 启动后自动回到上次上屏的那块屏
+      lastDisplayId: null,      // 上次上屏的显示器
+      hotkeys: true,            // 全局快捷键
+      serverAuto: true,         // 随软件启动推送接口（手机遥控要用）
+      mobilePin: '',            // 手机遥控页口令，空 = 不校验
       tickers: ['数据实时同步 · 支持控制台编辑 / HTTP 推送 / Excel 导入']
     }
   };
@@ -207,10 +223,37 @@ function isV2(obj) {
 let board = null;
 let saveTimer = null;
 
+/** 启动时留一份备份：半小时内不重复，最多留 5 份，误删误改能捞回来 */
+function backupOnce(raw) {
+  try {
+    const dir = backupDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const list = () => fs.readdirSync(dir)
+      .filter((f) => f.startsWith('board-') && f.endsWith('.json')).sort();
+    const before = list();
+    if (before.length) {
+      const last = path.join(dir, before[before.length - 1]);
+      if (Date.now() - fs.statSync(last).mtimeMs < 30 * 60 * 1000) return;
+    }
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+    fs.writeFileSync(path.join(dir, `board-${stamp}.json`), raw, 'utf8');
+    const after = list();
+    for (const f of after.slice(0, Math.max(0, after.length - 5))) {
+      try { fs.unlinkSync(path.join(dir, f)); } catch (_) {}
+    }
+  } catch (e) {
+    console.error('[store] backup failed:', e.message);
+  }
+}
+
 function load() {
   if (board) return board;
   try {
-    const parsed = JSON.parse(fs.readFileSync(FILE(), 'utf8'));
+    const raw = fs.readFileSync(FILE(), 'utf8');
+    backupOnce(raw);
+    const parsed = JSON.parse(raw);
     if (isV2(parsed)) {
       const base = sampleBoard();
       board = {
@@ -253,7 +296,9 @@ function save() {
 
 const SETTING_KEYS = [
   'accent', 'accent2', 'showClock', 'showSummary', 'zebra',
-  'autoScroll', 'scrollSpeed', 'layout', 'tickers', 'autoLaunch'
+  'autoScroll', 'scrollSpeed', 'layout', 'tickers', 'autoLaunch',
+  'autoRestoreOutput', 'lastDisplayId', 'fontScale', 'hotkeys',
+  'serverAuto', 'mobilePin'
 ];
 
 /**
@@ -288,6 +333,21 @@ function updateBoard(patch) {
   if (rows) {
     rows.forEach((r) => { r.cells = r.cells; });
     if (JSON.stringify(rows) !== JSON.stringify(b.rows)) { b.rows = rows; changed = true; }
+  }
+
+  // 单行局部更新：手机遥控页改一格就只发这一格，不会覆盖别处同时改的内容
+  if (patch.rowPatch && patch.rowPatch.id) {
+    const target = b.rows.find((r) => r.id === String(patch.rowPatch.id));
+    if (target) {
+      const src = patch.rowPatch.cells || {};
+      for (const c of b.columns) {
+        if (c.type === 'index' || !(c.key in src)) continue;
+        const v = c.type === 'progress'
+          ? toProgress(src[c.key])
+          : String(src[c.key] == null ? '' : src[c.key]).slice(0, 200);
+        if (target.cells[c.key] !== v) { target.cells[c.key] = v; changed = true; }
+      }
+    }
   }
 
   if (patch.settings && typeof patch.settings === 'object') {
@@ -360,6 +420,29 @@ function getBoard() {
   return clone(board);
 }
 
+/** 只取设置，不复制整份数据（状态广播很频繁，别为了几个开关克隆上千行） */
+function getSettings() {
+  load();
+  return Object.assign({}, board.settings);
+}
+
+/** 恢复到出厂示例 / 清空数据（列结构与设置保留） */
+function resetBoard(kind) {
+  load();
+  const base = sampleBoard();
+  if (kind === 'empty') {
+    base.rows = [];
+    base.title = board.title;
+    base.subtitle = board.subtitle;
+    base.columns = board.columns;
+    base.settings = Object.assign(base.settings, board.settings);
+  }
+  base.updatedAt = Date.now();
+  board = base;
+  saveNow();
+  return clone(board);
+}
+
 function replaceBoard(next) {
   load();
   return updateBoard(next);
@@ -370,6 +453,7 @@ function exportPath() {
 }
 
 module.exports = {
-  load, save, saveNow, getBoard, updateBoard, replaceBoard,
-  addDict, addDictMany, sampleBoard, defaultColumns, defaultRows, FILE
+  load, save, saveNow, getBoard, getSettings, updateBoard, replaceBoard, resetBoard,
+  addDict, addDictMany, sampleBoard, defaultColumns, defaultRows,
+  FILE, isPortable, dataDir, backupDir
 };

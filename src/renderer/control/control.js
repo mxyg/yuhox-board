@@ -172,6 +172,73 @@ function renderStatus() {
 
   $('#verLine').textContent = 'v' + (status.version || '—');
   renderAutoLaunch();
+  renderMobile();
+  renderData();
+  renderHotkeys();
+}
+
+/* ───────── 手机遥控 ───────── */
+
+function mobileUrl() {
+  const lan = (status && status.lan) || [];
+  const port = (status && status.server && status.server.port) || 7788;
+  return `http://${lan[0] || '127.0.0.1'}:${port}/m`;
+}
+
+function renderMobile() {
+  const srv = (status && status.server) || {};
+  const pin = (board && board.settings && board.settings.mobilePin) || '';
+  const badge = $('#stMobile');
+  if (badge) {
+    badge.className = 'badge ' + (srv.running ? 'on' : 'off');
+    badge.innerHTML = `<span class="dot"></span>${srv.running ? (pin ? '需口令' : '局域网可访问') : '未开启'}`;
+  }
+  const el = $('#mobileUrl');
+  if (el) el.textContent = srv.running ? mobileUrl() : '先启动下面的「HTTP 实时推送」';
+  const inp = $('#inpPin');
+  if (inp && document.activeElement !== inp) inp.value = pin;
+  const tip = $('#pinTip');
+  if (tip) {
+    tip.textContent = pin
+      ? '已设口令：手机首次打开需要输入这个口令。'
+      : '现场网络人多时建议设个口令，手机第一次打开会要求输入。';
+  }
+}
+
+/* ───────── 数据与维护 ───────── */
+
+function renderData() {
+  const d = (status && status.data) || {};
+  $('#dataPath').textContent = d.file || '—';
+  const b = $('#stPortable');
+  b.className = 'badge ' + (d.portable ? 'on' : '');
+  b.innerHTML = `<span class="dot"></span>${d.portable ? '便携版 · 数据跟着文件夹' : '安装版 · 数据在用户目录'}`;
+}
+
+/* ───────── 全局快捷键 ───────── */
+
+const HK_DESC = {
+  'CommandOrControl+Alt+B': '黑屏 / 恢复画面',
+  'CommandOrControl+Alt+H': '收起 / 唤出控制台',
+  'CommandOrControl+Alt+S': '上屏 / 撤下大屏'
+};
+
+function renderHotkeys() {
+  const h = (status && status.hotkeys) || {};
+  const list = $('#hotkeyList');
+  if (!list) return;
+  if (h.enabled === false) {
+    list.innerHTML = '<span class="hk-row off">全局快捷键已关闭</span>';
+    return;
+  }
+  const active = h.active || [];
+  if (!active.length) {
+    list.innerHTML = '<span class="hk-row off">快捷键被其它软件占用，未能注册</span>';
+    return;
+  }
+  list.innerHTML = active.map((a) =>
+    `<span class="hk-row"><b>${a.label}</b><em>${HK_DESC[a.accel] || ''}</em></span>`
+  ).join('');
 }
 
 /* 开机自启开关：状态来自主进程（用户偏好 + 系统真实状态） */
@@ -326,7 +393,7 @@ function wireRow(row) {
       if (bar) bar.style.width = num.value + '%';
     });
     num.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') num.blur();
+      if (e.key === 'Enter') { e.preventDefault(); focusSiblingCell(num, e.shiftKey ? -1 : 1) || num.blur(); }
     });
   });
 
@@ -525,14 +592,39 @@ function onInputKeydown(e) {
     acIndex = Math.max(0, acIndex - 1);
     renderAC();
   } else if (e.key === 'Enter') {
-    if (shown && acIndex >= 0) { e.preventDefault(); applyAC(acIndex); }
-    else { remember(e.target.dataset.key, e.target.value); hideAC(); }
+    if (shown && acIndex >= 0) { e.preventDefault(); applyAC(acIndex); return; }
+    remember(e.target.dataset.key, e.target.value);
+    hideAC();
+    // 回车往下走一格，方便连续录一整列；到最后一行再回车自动加一行
+    e.preventDefault();
+    focusSiblingCell(e.target, e.shiftKey ? -1 : 1);
   } else if (e.key === 'Escape') {
     hideAC();
   } else if (e.key === 'Tab') {
     remember(e.target.dataset.key, e.target.value);
     hideAC();
   }
+}
+
+/** 同列上下移动焦点；到底了就新增一行（返回是否处理了） */
+function focusSiblingCell(input, dir) {
+  const key = input.dataset.key;
+  const row = input.closest('.te-row');
+  if (!key || !row) return false;
+  let sib = dir > 0 ? row.nextElementSibling : row.previousElementSibling;
+  while (sib && !sib.classList.contains('te-row')) {
+    sib = dir > 0 ? sib.nextElementSibling : sib.previousElementSibling;
+  }
+  if (!sib) {
+    if (dir > 0) { $('#btnAddRow').click(); return true; }
+    return false;
+  }
+  const sel = `.cell-input[data-key="${key}"], .cell-num[data-key="${key}"]`;
+  const target = sib.querySelector(sel) || sib.querySelector('.cell-input');
+  if (!target) return false;
+  target.focus();
+  if (target.select) target.select();
+  return true;
 }
 
 window.addEventListener('scroll', hideAC, true);
@@ -981,6 +1073,14 @@ function renderSettings() {
   $('#swScroll').checked = !!s.autoScroll;
   $('#rngSpeed').value = s.scrollSpeed;
   $('#lblSpeed').textContent = s.scrollSpeed + ' px/s';
+
+  const fs2 = s.fontScale || 1;
+  $('#rngFont').value = fs2;
+  $('#lblFont').textContent = Math.round(fs2 * 100) + '%';
+
+  $('#swRestore').checked = s.autoRestoreOutput !== false;
+  $('#swHotkeys').checked = s.hotkeys !== false;
+  $('#swServerAuto').checked = s.serverAuto !== false;
 }
 
 $('#inpAccent').addEventListener('input', debounce((e) => pushBoard({ settings: { accent: e.target.value } }), 250));
@@ -990,6 +1090,90 @@ $('#swClock').addEventListener('change', (e) => pushBoard({ settings: { showCloc
 $('#swSummary').addEventListener('change', (e) => pushBoard({ settings: { showSummary: e.target.checked } }));
 $('#swZebra').addEventListener('change', (e) => pushBoard({ settings: { zebra: e.target.checked } }));
 $('#swScroll').addEventListener('change', (e) => pushBoard({ settings: { autoScroll: e.target.checked } }));
+$('#rngFont').addEventListener('input', (e) => {
+  const v = Number(e.target.value);
+  $('#lblFont').textContent = Math.round(v * 100) + '%';
+  previewFontScale(v);          // 拖的时候先让预览跟着变，松手才落库
+}, { passive: true });
+$('#rngFont').addEventListener('change', (e) => {
+  pushBoard({ settings: { fontScale: Number(e.target.value) } });
+});
+
+function previewFontScale(v) {
+  if (!board) return;
+  forwardToPreview(Object.assign({}, board, {
+    settings: Object.assign({}, board.settings, { fontScale: v })
+  }));
+}
+
+/* 影响主进程行为的开关，走 prefs */
+$('#swRestore').addEventListener('change', async (e) => {
+  status = await window.yuhox.setPrefs({ autoRestoreOutput: e.target.checked });
+  renderStatus();
+  toast(e.target.checked ? '下次启动会自动回到上次的大屏' : '下次启动不再自动上屏');
+});
+$('#swHotkeys').addEventListener('change', async (e) => {
+  status = await window.yuhox.setPrefs({ hotkeys: e.target.checked });
+  renderStatus();
+  toast(e.target.checked ? '全局快捷键已开启' : '全局快捷键已关闭');
+});
+$('#swServerAuto').addEventListener('change', async (e) => {
+  status = await window.yuhox.setPrefs({ serverAuto: e.target.checked });
+  renderStatus();
+  toast(e.target.checked ? '以后启动会自动开推送接口' : '以后启动不再自动开推送接口');
+});
+
+/* ───────── 手机遥控 ───────── */
+
+$('#btnCopyMobile').addEventListener('click', async () => {
+  const url = mobileUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('已复制：' + url);
+  } catch (_) {
+    toast('复制失败，请手动记下：' + url);
+  }
+});
+
+$('#btnOpenMobile').addEventListener('click', () => {
+  if (!(status && status.server && status.server.running)) {
+    toast('先启动推送接口');
+    return;
+  }
+  window.yuhox.openUrl(mobileUrl());
+});
+
+$('#btnSavePin').addEventListener('click', async () => {
+  const v = $('#inpPin').value.trim().slice(0, 12);
+  await pushBoard({ settings: { mobilePin: v } });
+  renderMobile();
+  toast(v ? '已设置口令：' + v : '已取消口令，局域网内可直接打开');
+});
+
+/* ───────── 数据与维护 ───────── */
+
+$('#btnOpenData').addEventListener('click', async () => {
+  const err = await window.yuhox.openDataDir();
+  if (err) toast('打不开目录：' + err);
+});
+
+$('#btnSample').addEventListener('click', async () => {
+  if (!confirm('用示例数据覆盖当前所有行？会立刻同步到大屏。')) return;
+  board = await window.yuhox.resetBoard('sample');
+  renderBoardTexts();
+  renderEditor();
+  renderSettings();
+  toast('已恢复示例数据');
+});
+
+$('#btnClear').addEventListener('click', async () => {
+  if (!confirm('清空所有行？列结构和设置会保留。')) return;
+  board = await window.yuhox.resetBoard('empty');
+  renderBoardTexts();
+  renderEditor();
+  renderSettings();
+  toast('已清空数据');
+});
 $('#rngSpeed').addEventListener('input', (e) => {
   $('#lblSpeed').textContent = e.target.value + ' px/s';
   pushBoard({ settings: { scrollSpeed: Number(e.target.value) } });

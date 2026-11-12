@@ -13,10 +13,11 @@
 
 const {
   app, BrowserWindow, ipcMain, screen, powerSaveBlocker,
-  Tray, Menu, nativeImage
+  Tray, Menu, nativeImage, globalShortcut, shell, clipboard
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const store = require('./store');
 const { createBoardServer } = require('./server');
 const excel = require('./excel');
@@ -37,9 +38,13 @@ let fileWatchDebounce = null;
 
 // 被开机自启拉起时带 --hidden：只留托盘，不弹窗，不打断用户
 const START_HIDDEN = process.argv.includes('--hidden');
+// 任务栏跳转列表「直接上屏」：即使带 --hidden 也把上次的大屏拉起来
+const FORCE_OUTPUT = process.argv.includes('--output');
 
 const boardServer = createBoardServer({
   port: 7788,
+  pagePath: path.join(__dirname, 'mobile.html'),
+  getPin: () => (store.getBoard().settings.mobilePin || ''),
   onUpdate: ({ patch, read }) => {
     if (read) return store.getBoard();
     const r = store.updateBoard(patch);
@@ -61,13 +66,38 @@ function broadcastBoard() {
   }
 }
 
+/** 本机局域网 IPv4，手机遥控页要用 */
+function lanAddresses() {
+  const out = [];
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const ni of nets[name] || []) {
+      if (ni.family === 'IPv4' && !ni.internal) out.push(ni.address);
+    }
+  }
+  return out;
+}
+
 function statusPayload() {
+  const s = store.getSettings();
   return {
     output: { active: !!outputWin, blacked, displayId: outputDisplayId },
     displays: listDisplays(),
     server: boardServer.status(),
     file: { watching: !!fileWatcher, path: fileWatchPath },
     autolaunch: autoLaunchState(),
+    data: {
+      file: store.FILE(),
+      dir: store.dataDir(),
+      backupDir: store.backupDir(),
+      portable: store.isPortable()
+    },
+    lan: lanAddresses(),
+    mobile: { pinRequired: !!s.mobilePin },
+    hotkeys: {
+      enabled: s.hotkeys !== false,
+      active: hotkeyActive.map((a) => ({ accel: a, label: HOTKEY_LABELS[a] || a }))
+    },
     version: app.getVersion()
   };
 }
@@ -85,7 +115,7 @@ const AUTOLAUNCH_PLATFORM = process.platform === 'win32' || process.platform ===
 
 /** 用户开关 + 系统真实状态一起报给界面，便于发现被系统清理掉的情况 */
 function autoLaunchState() {
-  const wanted = store.getBoard().settings.autoLaunch !== false;
+  const wanted = store.getSettings().autoLaunch !== false;
   let os = wanted;
   if (AUTOLAUNCH_PLATFORM && app.isPackaged) {
     try { os = !!app.getLoginItemSettings().openAtLogin; } catch (_) { os = wanted; }
@@ -120,7 +150,7 @@ function applyAutoLaunch(enabled) {
 
 /** 启动时对齐：用户偏好的开关与系统状态不一致就以偏好为准 */
 function syncAutoLaunch() {
-  const wanted = store.getBoard().settings.autoLaunch !== false;
+  const wanted = store.getSettings().autoLaunch !== false;
   if (AUTOLAUNCH_PLATFORM && app.isPackaged) {
     let os = null;
     try { os = !!app.getLoginItemSettings().openAtLogin; } catch (_) {}
@@ -135,6 +165,88 @@ function setAutoLaunch(enabled) {
   applyAutoLaunch(!!enabled);
   broadcastStatus();
   return { ...autoLaunchState(), applied: !!enabled };
+}
+
+/* ───────────────────────── 全局快捷键 ───────────────────────── */
+
+const HOTKEY_DEFS = [
+  { accel: 'CommandOrControl+Alt+B', label: '黑屏 / 取消黑屏', action: 'black' },
+  { accel: 'CommandOrControl+Alt+H', label: '显示 / 收起控制台', action: 'control' },
+  { accel: 'CommandOrControl+Alt+S', label: '上屏 / 撤下大屏', action: 'output' }
+];
+const HOTKEY_LABELS = {
+  'CommandOrControl+Alt+B': 'Ctrl + Alt + B',
+  'CommandOrControl+Alt+H': 'Ctrl + Alt + H',
+  'CommandOrControl+Alt+S': 'Ctrl + Alt + S'
+};
+
+let hotkeyActive = [];
+
+/** 优先用上次那块屏；没有就用副屏，只有一个屏就用主屏 */
+function preferredDisplayId() {
+  const s = store.getSettings();
+  if (s.lastDisplayId != null && findDisplay(s.lastDisplayId)) return s.lastDisplayId;
+  const primary = screen.getPrimaryDisplay();
+  const other = screen.getAllDisplays().find((d) => d.id !== primary.id);
+  return (other || primary).id;
+}
+
+function applyHotkeys(enabled) {
+  try { globalShortcut.unregisterAll(); } catch (_) {}
+  hotkeyActive = [];
+  if (!enabled) return;
+  const acts = {
+    black: () => { if (outputWin) setBlacked(!blacked); },
+    control: () => {
+      if (controlWin && controlWin.isVisible() && !controlWin.isMinimized()) controlWin.hide();
+      else showControlWindow();
+    },
+    output: () => {
+      if (outputWin) stopOutput();
+      else startOutput(preferredDisplayId());
+    }
+  };
+  for (const d of HOTKEY_DEFS) {
+    try {
+      if (globalShortcut.register(d.accel, acts[d.action])) hotkeyActive.push(d.accel);
+    } catch (_) { /* 被别的软件占了就跳过 */ }
+  }
+}
+
+/** 启动时回到上次的大屏（开机自启也生效，现场开机即出画面） */
+function restoreOutput() {
+  if (outputWin) return false;            // 用户已经手动上屏了，别抢
+  const s = store.getSettings();
+  if (s.autoRestoreOutput === false && !FORCE_OUTPUT) return false;
+  if (s.lastDisplayId == null) return false;
+  const d = findDisplay(s.lastDisplayId);
+  if (!d) return false;
+  startOutput(d.id);
+  return true;
+}
+
+/** Windows 任务栏右键菜单 */
+function applyJumpList() {
+  if (process.platform !== 'win32') return;
+  try {
+    app.setAppUserModelId('com.yuhox.board');
+    app.setUserTasks([
+      {
+        program: process.execPath, arguments: '', title: '显示控制台',
+        description: '打开 Yuhox Board 控制台', iconPath: process.execPath, iconIndex: 0
+      },
+      {
+        program: process.execPath, arguments: '--hidden --output', title: '直接上屏',
+        description: '后台启动并推送到上次的大屏', iconPath: process.execPath, iconIndex: 0
+      },
+      {
+        program: process.execPath, arguments: '--hidden', title: '仅托盘待命',
+        description: '不弹窗，只留右下角托盘', iconPath: process.execPath, iconIndex: 0
+      }
+    ]);
+  } catch (e) {
+    console.error('[jumplist]', e.message);
+  }
 }
 
 /* ───────────────────────── 托盘 ───────────────────────── */
@@ -166,15 +278,33 @@ function refreshTrayMenu() {
   trayMenuTimer = setTimeout(buildTrayMenu, 40);
 }
 
+/** 手机遥控页地址（取第一个局域网 IP） */
+function mobileUrl() {
+  const ip = lanAddresses()[0] || '127.0.0.1';
+  return `http://${ip}:${boardServer.port}/m`;
+}
+
 function buildTrayMenu() {
   if (!tray || tray.isDestroyed()) return;
   const displays = listDisplays();
   const hasOutput = !!outputWin;
+  const srv = boardServer.status();
+  const mUrl = mobileUrl();
 
   const template = [
     { label: hasOutput ? '大屏输出中' : '未上屏', enabled: false },
     { type: 'separator' },
     { label: '显示控制台', click: () => showControlWindow() },
+    {
+      label: '手机遥控',
+      enabled: srv.running,
+      submenu: [
+        { label: mUrl, click: () => shell.openExternal(mUrl) },
+        { label: '复制地址', click: () => { clipboard.writeText(mUrl); } },
+        { type: 'separator' },
+        { label: '打开数据目录', click: () => { shell.openPath(store.dataDir()); } }
+      ]
+    },
     {
       label: '上屏到大屏',
       submenu: displays.map((d) => ({
@@ -276,6 +406,8 @@ function closeIdentify() {
 function createOutputWindow(display) {
   destroyOutput();
   outputDisplayId = display.id;   // 立刻记下目标屏，状态回报不用等 ready-to-show
+  // 记住这块屏，下次启动 / 快捷键可以直接回到这里
+  try { store.updateBoard({ settings: { lastDisplayId: display.id } }); } catch (_) {}
   outputWin = new BrowserWindow({
     x: display.bounds.x,
     y: display.bounds.y,
@@ -416,6 +548,44 @@ function ipc() {
   /* ── 开机自启 ── */
   ipcMain.handle('autolaunch:get', () => autoLaunchState());
   ipcMain.handle('autolaunch:set', (_e, v) => setAutoLaunch(!!v));
+
+  /* ── 偏好（影响主进程行为，不只是画面） ── */
+  ipcMain.handle('prefs:set', (_e, p) => {
+    const patch = { settings: {} };
+    const src = p || {};
+    if ('hotkeys' in src) patch.settings.hotkeys = !!src.hotkeys;
+    if ('autoRestoreOutput' in src) patch.settings.autoRestoreOutput = !!src.autoRestoreOutput;
+    if ('serverAuto' in src) patch.settings.serverAuto = !!src.serverAuto;
+    const r = store.updateBoard(patch);
+    if (r.changed) broadcastBoard();
+    if ('hotkeys' in src) applyHotkeys(!!src.hotkeys);
+    if ('serverAuto' in src) {
+      if (src.serverAuto) boardServer.start().catch((e) => console.error('[server]', e.message));
+      else boardServer.stop();
+    }
+    broadcastStatus();
+    return statusPayload();
+  });
+
+  /* ── 打开外部链接（手机遥控地址） ── */
+  ipcMain.handle('app:openUrl', (_e, url) => {
+    if (!/^https?:\/\//i.test(String(url || ''))) return false;
+    shell.openExternal(String(url));
+    return true;
+  });
+
+  /* ── 数据文件 ── */
+  ipcMain.handle('data:open', async () => {
+    const dir = store.dataDir();
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+    return shell.openPath(dir);
+  });
+  ipcMain.handle('data:reset', (_e, kind) => {
+    const b = store.resetBoard(kind === 'empty' ? 'empty' : 'sample');
+    broadcastBoard();
+    broadcastStatus();
+    return b;
+  });
 
   ipcMain.handle('server:start', async (_e, port) => {
     if (Number.isFinite(port) && port > 0) boardServer.port = port;
@@ -572,8 +742,16 @@ if (!gotLock) {
     ipc();
     wireDisplayEvents();
     createTray();
+    applyJumpList();
     syncAutoLaunch();                 // 首次运行 autoLaunch 默认 true，直接写入系统
+    applyHotkeys(store.getSettings().hotkeys !== false);
+    // 推送接口默认随软件启动，手机遥控页才打得开
+    if (store.getSettings().serverAuto !== false) {
+      boardServer.start().catch((e) => console.error('[server] autostart failed:', e.message));
+    }
     if (!START_HIDDEN) createControlWindow();
+    // 等窗口和显示器信息就绪再回到上次的大屏
+    setTimeout(restoreOutput, 700);
     app.on('activate', () => { showControlWindow(); });
   });
 }
@@ -590,6 +768,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   quitting = true;
   clearTimeout(trayMenuTimer);
+  try { globalShortcut.unregisterAll(); } catch (_) {}
   stopFileWatch();
   store.saveNow();
   if (tray && !tray.isDestroyed()) { try { tray.destroy(); } catch (_) {} tray = null; }
