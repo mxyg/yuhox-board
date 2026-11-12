@@ -68,14 +68,15 @@ function startParticles() {
   const cv = $('#fx');
   const ctx = cv.getContext('2d');
   let W = 0, H = 0, dots = [];
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  // 大屏多为 1080p/4K，DPR 拉满会让每帧填充像素翻四倍；粒子本身是柔光点，1.5 足够
+  const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
 
   function resize() {
     W = window.innerWidth; H = window.innerHeight;
     cv.width = W * DPR; cv.height = H * DPR;
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    const n = Math.min(90, Math.floor(W * H / 26000));
+    const n = Math.min(70, Math.floor(W * H / 34000));
     dots = Array.from({ length: n }, () => ({
       x: Math.random() * W,
       y: Math.random() * H,
@@ -110,21 +111,26 @@ function startParticles() {
       ctx.fillStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${d.a})`;
       ctx.fill();
     }
+    // 连线分两档透明度，各自合成一条路径一次描边；
+    // 原来每条线单独 beginPath/stroke，几千次状态切换是卡顿主因
+    const NEAR = 6000, FAR = 15000;
     ctx.lineWidth = 0.5;
-    for (let i = 0; i < dots.length; i++) {
-      for (let j = i + 1; j < dots.length; j++) {
-        const a = dots[i], b = dots[j];
-        const dx = a.x - b.x, dy = a.y - b.y;
-        const dist2 = dx * dx + dy * dy;
-        if (dist2 < 15000) {
-          const alpha = (1 - dist2 / 15000) * 0.08;
-          ctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${alpha})`;
-          ctx.beginPath();
+    for (const bucket of [{ limit: NEAR, alpha: 0.09 }, { limit: FAR, alpha: 0.04 }]) {
+      ctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${bucket.alpha})`;
+      ctx.beginPath();
+      for (let i = 0; i < dots.length; i++) {
+        const a = dots[i];
+        for (let j = i + 1; j < dots.length; j++) {
+          const b = dots[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const dist2 = dx * dx + dy * dy;
+          if (dist2 >= bucket.limit) continue;
+          if (bucket.limit === FAR && dist2 < NEAR) continue;
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
-          ctx.stroke();
         }
       }
+      ctx.stroke();
     }
     requestAnimationFrame(frame);
   })();

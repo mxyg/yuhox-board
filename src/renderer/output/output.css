@@ -33,7 +33,7 @@ body { overflow: hidden; }
 /* ───── 动态背景：粒子画布 + 极光 + 网格 ───── */
 #fx { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-.aurora { position: absolute; inset: 0; overflow: hidden; filter: blur(70px); opacity: .55; }
+.aurora { position: absolute; inset: 0; overflow: hidden; opacity: .62; }
 .aurora i {
   position: absolute;
   border-radius: 50%;
@@ -86,8 +86,14 @@ body { overflow: hidden; }
   top: -40vh;
   width: 26vw;
   height: 180vh;
-  background: linear-gradient(90deg, transparent, rgba(79, 140, 255, 0.055), rgba(34, 211, 238, 0.032), transparent);
-  filter: blur(34px);
+  /* 用多层渐变做出柔和边缘，替代 filter: blur()——大屏 4K 下逐帧重算模糊太吃 GPU */
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(79, 140, 255, 0.006) 14%,
+    rgba(79, 140, 255, 0.05) 42%,
+    rgba(34, 211, 238, 0.032) 58%,
+    rgba(34, 211, 238, 0.006) 86%,
+    transparent 100%);
   transform: rotate(16deg) translateX(-40vw);
   animation: beamSweep 22s linear infinite;
 }
@@ -336,11 +342,10 @@ body { overflow: hidden; }
 .kpi-card {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(160deg, rgba(12, 18, 32, 0.72), rgba(10, 15, 28, 0.55));
+  background: linear-gradient(160deg, rgba(12, 18, 32, 0.8), rgba(10, 15, 28, 0.64));
   border: 1px solid rgba(148, 170, 220, 0.13);
   border-radius: calc(var(--u) * 1.2);
   padding: calc(var(--u) * 1.3) calc(var(--u) * 1.7);
-  backdrop-filter: blur(16px);
   transition: border-color .3s;
 }
 .kpi-card:hover { border-color: rgba(79, 140, 255, 0.4); }
@@ -441,10 +446,9 @@ body { overflow: hidden; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: rgba(10, 15, 28, 0.42);
+  background: rgba(10, 15, 28, 0.5);
   border: 1px solid rgba(148, 170, 220, 0.1);
   border-radius: calc(var(--u) * 1.2);
-  backdrop-filter: blur(10px);
   overflow: hidden;
 }
 .col-head {
@@ -479,12 +483,11 @@ body { overflow: hidden; }
 /* 任务卡片 */
 .card-ob {
   position: relative;
-  background: linear-gradient(150deg, rgba(148, 170, 220, 0.09), rgba(148, 170, 220, 0.035));
+  background: linear-gradient(150deg, rgba(148, 170, 220, 0.1), rgba(148, 170, 220, 0.045));
   border: 1px solid rgba(148, 170, 220, 0.12);
   border-left: calc(var(--u) * .3) solid var(--st);
   border-radius: calc(var(--u) * .9);
   padding: calc(var(--u) * .95) calc(var(--u) * 1.1);
-  backdrop-filter: blur(8px);
   transition: transform .25s, box-shadow .25s, opacity .3s;
   flex-shrink: 0;
   animation: cardIn .45s cubic-bezier(.22, 1, .36, 1) both;
@@ -635,8 +638,7 @@ body { overflow: hidden; }
   min-height: 0;
   border: 1px solid rgba(148, 170, 220, 0.12);
   border-radius: calc(var(--u) * 1.2);
-  background: rgba(8, 12, 22, 0.74);
-  backdrop-filter: blur(14px);
+  background: rgba(8, 12, 22, 0.82);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
   overflow: hidden;
 }
