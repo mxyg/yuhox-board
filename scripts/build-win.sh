@@ -23,7 +23,7 @@ echo "→ 安装依赖"
 npm install --no-audit --no-fund
 
 echo "→ 构建 Windows 安装包"
-npx electron-builder --win --x64
+npx electron-builder --win --x64 --publish never
 
 echo "→ 产物："
 ls -lh release/*.exe
