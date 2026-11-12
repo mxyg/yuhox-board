@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Yuhox Board · 大屏</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <link rel="stylesheet" href="../shared/theme.css" />
+  <link rel="stylesheet" href="output.css" />
+</head>
+<body>
+<div class="stage" id="stage">
+  <!-- 动态背景层 -->
+  <canvas id="fx"></canvas>
+  <div class="aurora"><i></i><i></i><i></i></div>
+  <div class="grid-overlay"></div>
+  <div class="vignette"></div>
+
+  <!-- 内容 -->
+  <div class="content">
+    <header class="ob-head">
+      <div class="ob-head-left">
+        <h1 id="obTitle">YUHOX BOARD</h1>
+        <div id="obSub" class="ob-sub"></div>
+      </div>
+      <div class="ob-head-right">
+        <div class="live" id="liveBadge"><i></i>LIVE</div>
+        <div class="clock" id="clockTime">--:--</div>
+        <div class="clock-date" id="clockDate"></div>
+      </div>
+    </header>
+
+    <section class="kpi" id="kpi">
+      <div class="kpi-card" data-kpi="total">
+        <div class="kpi-label">任务总数</div>
+        <div class="kpi-value" id="kpiTotal">0</div>
+        <div class="kpi-spark"><i></i></div>
+      </div>
+      <div class="kpi-card doing" data-kpi="doing">
+        <div class="kpi-label">进行中</div>
+        <div class="kpi-value" id="kpiDoing">0</div>
+        <div class="kpi-spark"><i></i></div>
+      </div>
+      <div class="kpi-card done" data-kpi="done">
+        <div class="kpi-label">已完成</div>
+        <div class="kpi-value" id="kpiDone">0</div>
+        <div class="kpi-spark"><i></i></div>
+      </div>
+      <div class="kpi-card ring-card" data-kpi="overall">
+        <div class="ring" id="kpiRing"><span id="kpiOverall">0%</span></div>
+        <div class="kpi-label">整体进度</div>
+      </div>
+    </section>
+
+    <section class="board" id="board"><!-- JS 渲染 --></section>
+
+    <footer class="ticker" id="ticker">
+      <div class="ticker-inner" id="tickerInner"></div>
+    </footer>
+  </div>
+
+  <!-- 黑屏待机 -->
+  <div class="black-overlay" id="blackOverlay"></div>
+</div>
+
+<script src="output.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+appId: com.yuhox.board
+productName: Yuhox Board
+copyright: Copyright © 2026 辽宁昱弘智能科技有限公司
+directories:
+  output: release
+  buildResources: build
+files:
+  - src/**/*
+  - package.json
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  shortcutName: Yuhox Board
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  artifactName: YuhoxBoard-Setup-${version}.${ext}
+portable:
+  artifactName: YuhoxBoard-Portable-${version}.${ext}

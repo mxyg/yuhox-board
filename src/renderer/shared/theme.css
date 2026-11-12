@@ -1,0 +1,111 @@
+/* Yuhox Board · 共享主题变量与基础样式 */
+:root {
+  --bg: #05070d;
+  --bg-soft: #0a0f1c;
+  --panel: rgba(148, 170, 220, 0.055);
+  --panel-strong: rgba(148, 170, 220, 0.10);
+  --border: rgba(148, 170, 220, 0.14);
+  --border-soft: rgba(148, 170, 220, 0.09);
+  --text: #e9eef9;
+  --muted: #8e99b3;
+  --faint: #5a6479;
+  --accent: #4f8cff;
+  --accent2: #22d3ee;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --danger: #fb7185;
+  --grad: linear-gradient(135deg, var(--accent), var(--accent2));
+  --radius: 14px;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --font: "Inter", "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(148,170,220,.18); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+input, select, textarea, button { font-family: inherit; }
+input, select, textarea {
+  background: rgba(10, 16, 30, 0.7);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .18s, box-shadow .18s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: rgba(79, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.15);
+}
+select option { background: #0a0f1c; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 11px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .16s ease, background .16s, border-color .16s, box-shadow .16s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--panel-strong); border-color: rgba(148,170,220,.28); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn.primary {
+  background: var(--grad);
+  border: none;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(79, 140, 255, 0.35);
+}
+.btn.primary:hover { box-shadow: 0 10px 30px rgba(79, 140, 255, 0.5); }
+.btn.danger { color: var(--danger); border-color: rgba(251, 113, 133, 0.3); }
+.btn.danger:hover { background: rgba(251, 113, 133, 0.12); }
+.btn.small { padding: 6px 11px; font-size: 12px; border-radius: 9px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+  letter-spacing: .02em;
+}
+.badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.badge.on { color: var(--ok); border-color: rgba(52, 211, 153, .35); }
+.badge.on .dot { background: var(--ok); box-shadow: 0 0 8px rgba(52, 211, 153, .8); animation: pulse 1.8s infinite; }
+.badge.off { color: var(--faint); }
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .5); }
+  50% { box-shadow: 0 0 0 5px rgba(52, 211, 153, 0); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}

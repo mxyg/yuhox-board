@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Yuhox Board · 控制台</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'; img-src 'self' data:;" />
+  <link rel="stylesheet" href="../shared/theme.css" />
+  <link rel="stylesheet" href="control.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- ───── 侧边导航 ───── -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">YB</div>
+      <div>
+        <div class="brand-name">Yuhox Board</div>
+        <div class="brand-sub">实时大屏看板</div>
+      </div>
+    </div>
+    <nav class="nav" id="nav">
+      <button class="nav-item active" data-panel="displays">
+        <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></svg></span><span>上屏控制</span>
+      </button>
+      <button class="nav-item" data-panel="content">
+        <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="7" height="17" rx="1.8"/><rect x="14" y="3.5" width="7" height="10" rx="1.8"/></svg></span><span>看板内容</span>
+      </button>
+      <button class="nav-item" data-panel="data">
+        <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M7.05 7.05a7 7 0 0 0 0 9.9M16.95 16.95a7 7 0 0 0 0-9.9M4.2 4.2a11 11 0 0 0 0 15.6M19.8 19.8a11 11 0 0 0 0-15.6"/></svg></span><span>实时数据源</span>
+      </button>
+      <button class="nav-item" data-panel="look">
+        <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3.2"/></svg></span><span>外观与动效</span>
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="foot-line" id="verLine">v—</div>
+      <div class="foot-line">开源免费 · MIT</div>
+    </div>
+  </aside>
+
+  <!-- ───── 主区 ───── -->
+  <main class="main">
+    <header class="topbar">
+      <h1 id="panelTitle">上屏控制</h1>
+      <div class="topbar-status">
+        <span class="badge off" id="stOutput"><span class="dot"></span>未上屏</span>
+        <span class="badge off" id="stServer"><span class="dot"></span>推送接口未启动</span>
+        <span class="badge off" id="stFile"><span class="dot"></span>未监听文件</span>
+      </div>
+    </header>
+
+    <div class="panels">
+
+      <!-- ───── 面板：上屏控制 ───── -->
+      <section class="panel active" id="panel-displays">
+        <div class="split">
+          <div class="split-left">
+            <div class="card">
+              <div class="card-head">
+                <h2>显示器</h2>
+                <button class="btn small" id="btnIdentify">识别显示器</button>
+              </div>
+              <div class="display-grid" id="displayGrid"><!-- JS 渲染 --></div>
+              <div class="action-row">
+                <button class="btn primary" id="btnStart">⏏ 上屏</button>
+                <button class="btn" id="btnBlack">⚗ 黑屏待机</button>
+                <button class="btn danger" id="btnStop">■ 撤下大屏</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>使用提示</h2></div>
+              <ul class="tips">
+                <li>选一块显示器 → 点「上屏」，大屏画面会全屏铺满那块屏。</li>
+                <li>本窗口始终留在主屏，方便你边改边看；改动的每个字都会实时出现在大屏上。</li>
+                <li>现场防干扰：可点「黑屏待机」临时隐去画面，撤屏前无需关软件。</li>
+                <li>上屏期间软件会阻止该显示器休眠。</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="split-right">
+            <div class="card preview-card">
+              <div class="card-head"><h2>大屏预览</h2><span class="badge on"><span class="dot"></span>实时</span></div>
+              <div class="preview-stage">
+                <iframe id="previewFrame" src="../output/index.html?preview=1" title="大屏预览"></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───── 面板：看板内容 ───── -->
+      <section class="panel" id="panel-content">
+        <div class="card">
+          <div class="card-head"><h2>标题区</h2></div>
+          <div class="field-row">
+            <label>主标题<input id="inpTitle" maxlength="60" placeholder="项目交付进度看板" /></label>
+            <label>副标题<input id="inpSubtitle" maxlength="80" placeholder="YUHOX · 实时任务动态" /></label>
+          </div>
+          <div class="field-row">
+            <label class="grow">底部滚动字幕（每行一条，可留空）<textarea id="inpTickers" rows="2" placeholder="例如：每周五 17:00 例会同步进度"></textarea></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>任务列表</h2>
+            <div class="head-actions">
+              <button class="btn small" id="btnSample">载入示例</button>
+              <button class="btn small primary" id="btnAddTask">＋ 新增任务</button>
+            </div>
+          </div>
+          <div class="task-legend">
+            <span><i class="lg lg-todo"></i>待启动</span>
+            <span><i class="lg lg-doing"></i>进行中</span>
+            <span><i class="lg lg-done"></i>已完成</span>
+            <span><i class="lg lg-blocked"></i>受阻</span>
+          </div>
+          <div class="task-list" id="taskList"><!-- JS 渲染 --></div>
+        </div>
+      </section>
+
+      <!-- ───── 面板：实时数据源 ───── -->
+      <section class="panel" id="panel-data">
+        <div class="data-grid">
+          <div class="card">
+            <div class="card-head">
+              <h2>HTTP 实时推送</h2>
+              <span class="badge off" id="stServer2"><span class="dot"></span>未启动</span>
+            </div>
+            <p class="desc">让外部系统（脚本 / MES / 表格工具 / 网页）把任务数据实时推到大屏。局域网内任何机器都能推。</p>
+            <div class="field-row">
+              <label>端口<input type="number" id="inpPort" value="7788" min="1024" max="65535" style="width:110px" /></label>
+              <div class="head-actions">
+                <button class="btn primary small" id="btnServerStart">启动</button>
+                <button class="btn small" id="btnServerStop">停止</button>
+              </div>
+            </div>
+            <pre class="code" id="apiDoc">POST http://&lt;本机IP&gt;:7788/api/board
+Content-Type: application/json
+
+{
+  "tasks": [
+    { "name": "装修施工", "owner": "工程部", "status": "doing", "progress": 72, "note": "三层封顶" },
+    { "name": "设备采购", "owner": "采购部", "status": "done",  "progress": 100 }
+  ]
+}
+
+# status: todo / doing / done / blocked
+# GET /api/board 读取 · GET /api/health 健康检查</pre>
+            <button class="btn small" id="btnCopyApi">复制接口说明</button>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>JSON 文件监听</h2>
+              <span class="badge off" id="stFile2"><span class="dot"></span>未监听</span>
+            </div>
+            <p class="desc">选一个 JSON 文件，内容一变（保存即变）大屏立刻跟着变。适合配合任何能落盘的工具。</p>
+            <div class="file-path" id="filePath">未选择文件</div>
+            <div class="head-actions">
+              <button class="btn primary small" id="btnFilePick">选择文件并监听</button>
+              <button class="btn small" id="btnFileClear">停止监听</button>
+            </div>
+            <pre class="code">// 文件内容可以是任务数组，也可以是完整看板对象
+[
+  { "name": "焊接作业", "owner": "二班", "status": "doing", "progress": 55 }
+]</pre>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>导入 / 导出</h2></div>
+            <p class="desc">当前看板配置可导出为 JSON 留档，或在新机器上直接沿用。</p>
+            <div class="head-actions">
+              <button class="btn small" id="btnExport">导出当前数据</button>
+              <button class="btn small" id="btnGotoContent">手动编辑 →</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───── 面板：外观与动效 ───── -->
+      <section class="panel" id="panel-look">
+        <div class="data-grid">
+          <div class="card">
+            <div class="card-head"><h2>主题色</h2></div>
+            <p class="desc">大屏的流光、进度条、标题渐变都会跟随这两个颜色。</p>
+            <div class="field-row">
+              <label>主色<input type="color" id="inpAccent" value="#4f8cff" /></label>
+              <label>辅色<input type="color" id="inpAccent2" value="#22d3ee" /></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>大屏布局</h2></div>
+            <div class="field-row">
+              <label>展示模式
+                <select id="selLayout">
+                  <option value="columns">泳道看板（按状态分列）</option>
+                  <option value="list">进度榜单（全宽进度条）</option>
+                </select>
+              </label>
+            </div>
+            <div class="switch-grid">
+              <label class="switch"><input type="checkbox" id="swClock" /><i></i>显示时钟</label>
+              <label class="switch"><input type="checkbox" id="swSummary" /><i></i>显示总览指标</label>
+              <label class="switch"><input type="checkbox" id="swNote" /><i></i>显示任务备注</label>
+              <label class="switch"><input type="checkbox" id="swScroll" /><i></i>内容溢出自动滚动</label>
+            </div>
+            <label class="slider-row">滚动速度 <input type="range" id="rngSpeed" min="10" max="80" value="36" /><span id="lblSpeed">36 px/s</span></label>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>关于</h2></div>
+            <p class="desc">Yuhox Board 是一款开源免费的实时屏幕数据动态显示软件：控制台在主屏编排，画面全屏推送到指定显示器。支持 HTTP 推送、文件监听与手动编辑三种实时数据方式。</p>
+            <p class="desc">项目地址：github.com/mxyg/yuhox-board（MIT License）</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- 行内提示 -->
+<div class="toast" id="toast"></div>
+
+<script src="control.js"></script>
+</body>
+</html>

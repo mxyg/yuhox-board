@@ -1,0 +1,26 @@
+{
+  "name": "yuhox-board",
+  "version": "1.0.0",
+  "description": "Yuhox Board —— 实时屏幕数据动态显示（任务进度大屏看板）",
+  "author": "Yuhox (辽宁昱弘智能科技有限公司) & contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/mxyg/yuhox-board",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mxyg/yuhox-board.git"
+  },
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --dir",
+    "pack": "npm run dist:dir"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}
