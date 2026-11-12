@@ -125,7 +125,7 @@ function sampleBoard() {
       zebra: true,
       autoScroll: true,
       scrollSpeed: 36,          // px/s，内容溢出时的自动滚动速度
-      layout: 'list',           // list(卡片看板，默认最好看) | table(整表)
+      layout: 'table',          // table(带表头的整表，默认) | list(竖向列表)
       fontScale: 1,             // 大屏字号缩放
       autoLaunch: true,         // 开机自动启动（默认开）
       autoRestoreOutput: true,  // 启动后自动回到上次上屏的那块屏

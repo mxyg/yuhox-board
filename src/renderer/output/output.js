@@ -287,6 +287,20 @@ function cellTag(col) {
   return '<div class="td txt"></div>';
 }
 
+/* ── 颜色分类：同一个值永远同一个颜色，用来区分等级、小队 ── */
+const PALETTE = ['#7dd3fc', '#a78bfa', '#fcd34d', '#6ee7b7', '#f9a8d4', '#93c5fd', '#fdba74', '#c4b5fd'];
+
+function toneFor(v) {
+  let h = 0;
+  for (const ch of String(v)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+function rgbaOf(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 function fillCell(cell, col, row, i, opts) {
   const v = row.cells ? row.cells[col.key] : '';
   if (col.type === 'index') {
@@ -305,8 +319,33 @@ function fillCell(cell, col, row, i, opts) {
     return;
   }
   const text = String(v == null ? '' : v);
-  if (cell.textContent !== text) cell.textContent = text;
+
+  if (opts.kind === 'tag') {
+    // 等级 / 备注：带色小标签，同一取值颜色固定
+    if (cell.dataset.v !== text) {
+      cell.dataset.v = text;
+      if (!text) cell.innerHTML = '';
+      else {
+        const c = toneFor(text);
+        cell.innerHTML = `<span class="tag" style="color:${c};background:${rgbaOf(c, 0.14)};border-color:${rgbaOf(c, 0.34)}">${escapeHtml(text)}</span>`;
+      }
+    }
+  } else if (opts.kind === 'team') {
+    if (cell.dataset.v !== text) {
+      cell.dataset.v = text;
+      const c = toneFor(text);
+      cell.innerHTML = text
+        ? `<span class="dot" style="background:${c};box-shadow:0 0 8px ${rgbaOf(c, 0.6)}"></span><span>${escapeHtml(text)}</span>`
+        : '';
+    }
+  } else {
+    if (cell.textContent !== text) cell.textContent = text;
+    if (cell.dataset.v) { delete cell.dataset.v; }
+  }
+
   cell.classList.toggle('primary', opts.primary);
+  if (opts.state) cell.dataset.state = opts.state;
+  else if (cell.dataset.state) delete cell.dataset.state;
   if (opts.changed) flash(cell);
 }
 
@@ -346,12 +385,15 @@ function renderTable(b) {
   const primary = primaryTextKey(cols);
   const pcol = cols.find((c) => c.type === 'progress') || null;
   const scol = pcol ? null : (cols.find((c) => c.type === 'text' && /进度|状态|情况/.test(c.label)) || null);
+  const tagCol = cols.find((c) => c.type === 'text' && /备注|等级|级别/.test(c.label)) || null;
+  const teamCol = cols.find((c) => c.type === 'text' && /小队|队伍|班组/.test(c.label)) || null;
 
   const existing = new Map();
   for (const el of [...scroll.children]) {
     if (el.dataset.rid) existing.set(el.dataset.rid, el);
   }
   const keep = new Set();
+  bindRowDrag(scroll.parentElement, '.tr');   // 整表也能按住行拖动排序
 
   rows.forEach((r, i) => {
     keep.add(r.id);
@@ -364,6 +406,7 @@ function renderTable(b) {
       el.style.animationDelay = (Math.min(i, 14) * 0.035) + 's';
       el.innerHTML = cols.map(cellTag).join('');
       el.dataset.sig = sig;
+      el.draggable = true;
       scroll.appendChild(el);
     }
 
@@ -380,7 +423,14 @@ function renderTable(b) {
       const v = c.type === 'index' ? i : (r.cells ? r.cells[c.key] : '');
       now[c.key] = v;
       const changed = !isNew && knownRows.has(r.id) && prev[c.key] !== v;
-      fillCell(cell, c, r, i, { primary: c.key === primary, changed });
+      const kind = tagCol && c.key === tagCol.key ? 'tag'
+        : (teamCol && c.key === teamCol.key ? 'team' : null);
+      let state = null;
+      if (scol && c.key === scol.key) {
+        const sv = String(r.cells ? r.cells[c.key] || '' : '');
+        state = /待|未完/.test(sv) ? 'todo' : (/完/.test(sv) ? 'done' : 'doing');
+      }
+      fillCell(cell, c, r, i, { primary: c.key === primary, changed, kind, state });
     });
     lastCells.set(r.id, now);
     // 行首光条跟随进度状态：完成变绿，其余用主题色
@@ -464,7 +514,7 @@ function renderList(b) {
   const existing = new Map();
   for (const el of [...scroll.children]) if (el.dataset.rid) existing.set(el.dataset.rid, el);
   const keep = new Set();
-  bindListDrag(scroll);
+  bindRowDrag(boardEl, '.row-ob');   // 绑在 boardEl 上，克隆出来的滚动段也能拖
 
   rows.forEach((r, i) => {
     keep.add(r.id);
@@ -541,13 +591,13 @@ function reorderRows(fromId, toId, after) {
   if (window.yuhox) window.yuhox.setBoard({ rows });
 }
 
-function bindListDrag(scroll) {
-  if (scroll.dataset.dragBound) return;
-  scroll.dataset.dragBound = '1';
+function bindRowDrag(container, rowSel) {
+  if (!container || container.dataset.dragBound) return;
+  container.dataset.dragBound = '1';
   let dragId = null;
 
   const clearMarks = () => {
-    scroll.querySelectorAll('.drop-before, .drop-after').forEach((n) => {
+    container.querySelectorAll('.drop-before, .drop-after').forEach((n) => {
       n.classList.remove('drop-before', 'drop-after');
     });
   };
@@ -555,11 +605,11 @@ function bindListDrag(scroll) {
     dragId = null;
     marqueeHold = false;
     clearMarks();
-    scroll.querySelectorAll('.dragging').forEach((n) => n.classList.remove('dragging'));
+    container.querySelectorAll('.dragging').forEach((n) => n.classList.remove('dragging'));
   };
 
-  scroll.addEventListener('dragstart', (e) => {
-    const row = e.target.closest('.row-ob');
+  container.addEventListener('dragstart', (e) => {
+    const row = e.target.closest(rowSel);
     if (!row || !window.yuhox) return;
     dragId = row.dataset.rid;
     row.classList.add('dragging');
@@ -568,9 +618,9 @@ function bindListDrag(scroll) {
     try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
   });
 
-  scroll.addEventListener('dragover', (e) => {
+  container.addEventListener('dragover', (e) => {
     if (!dragId) return;
-    const row = e.target.closest('.row-ob');
+    const row = e.target.closest(rowSel);
     if (!row) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -580,9 +630,9 @@ function bindListDrag(scroll) {
     if (row.dataset.rid !== dragId) row.classList.add(after ? 'drop-after' : 'drop-before');
   });
 
-  scroll.addEventListener('drop', (e) => {
+  container.addEventListener('drop', (e) => {
     if (!dragId) return;
-    const row = e.target.closest('.row-ob');
+    const row = e.target.closest(rowSel);
     if (!row) return;
     e.preventDefault();
     const rect = row.getBoundingClientRect();
@@ -593,9 +643,9 @@ function bindListDrag(scroll) {
     reorderRows(from, to, after);
   });
 
-  scroll.addEventListener('dragend', end);
-  scroll.addEventListener('dragleave', (e) => {
-    if (!scroll.contains(e.relatedTarget)) clearMarks();
+  container.addEventListener('dragend', end);
+  container.addEventListener('dragleave', (e) => {
+    if (!container.contains(e.relatedTarget)) clearMarks();
   });
 }
 

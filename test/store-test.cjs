@@ -44,10 +44,10 @@ ok('默认设置：开机自启 / 恢复上屏都开着', () => {
   assert.strictEqual(s.mobilePin, '');
 });
 
-ok('默认列结构：金宇建安小修作业 9 列，默认卡片版式', () => {
+ok('默认列结构：金宇建安小修作业 9 列，默认带表头整表', () => {
   const b = store.getBoard();
   assert.strictEqual(b.title, '金宇建安小修作业');
-  assert.strictEqual(b.settings.layout, 'list');
+  assert.strictEqual(b.settings.layout, 'table');
   assert.deepStrictEqual(b.columns.map((c) => c.label), [
     '小队', '原井号', '施工项目', '区域', '施工进度',
     '新井号', '新施工项目', '新区域', '备注'

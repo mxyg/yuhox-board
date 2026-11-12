@@ -628,7 +628,10 @@ body { overflow: hidden; }
 .row-ob .pct { min-width: 0; }
 
 /* 拖动排序 */
-.row-ob.dragging { opacity: .45; cursor: grabbing; }
+.row-ob.dragging, .tr.dragging { opacity: .45; cursor: grabbing; }
+.tr.drop-before, .row-ob.drop-before { box-shadow: inset 0 2px 0 0 var(--ob-accent2); }
+.tr.drop-after, .row-ob.drop-after { box-shadow: inset 0 -2px 0 0 var(--ob-accent2); }
+.tbl-body .tr { cursor: grab; }
 .row-ob.drop-before { box-shadow: inset 0 2px 0 0 var(--ob-accent2); }
 .row-ob.drop-after { box-shadow: inset 0 -2px 0 0 var(--ob-accent2); }
 .board.list.status-mode .row-ob { cursor: grab; }
@@ -849,6 +852,30 @@ body { overflow: hidden; }
 }
 .td.prog.done .pct { color: var(--st-done); }
 .td.prog.idle .pct { color: var(--faint); }
+
+/* 状态文字配色：完成绿 / 待办黄 / 进行蓝 */
+.td[data-state="done"], .td.primary[data-state="done"] { color: #6ee7b7; }
+.td[data-state="todo"], .td.primary[data-state="todo"] { color: #fcd34d; }
+.td[data-state="doing"], .td.primary[data-state="doing"] { color: #93c5fd; }
+
+/* 取值标签（备注 / 等级）与小队色点 */
+.td .tag {
+  display: inline-block;
+  padding: 0 calc(var(--u) * .5);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: calc(var(--u) * 1.02);
+  font-weight: 700;
+  line-height: 1.62;
+}
+.td .dot {
+  display: inline-block;
+  width: calc(var(--u) * .46);
+  height: calc(var(--u) * .46);
+  border-radius: 50%;
+  margin-right: calc(var(--u) * .5);
+  vertical-align: middle;
+}
 .td.flash { border-radius: 6px; animation: cellFlash 1.1s ease; }
 @keyframes cellFlash {
   0% { background: rgba(79, 140, 255, 0.30); }
