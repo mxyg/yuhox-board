@@ -1,8 +1,11 @@
 /**
  * Yuhox Board · 大屏渲染
+ *
  * 两条数据通道：IPC（真实输出窗口）/ postMessage（控制台预览 iframe）。
- * 渲染策略：按任务 id 对账（新增滑入、字段原地过渡、缺失淡出），
+ * 渲染策略：按行 id 对账（新增滑入、单元格原地更新、内容变化闪一下），
  * 数字 KPI 做滚动补间，内容溢出时自动循环滚动。
+ *
+ * 版式由 board.columns 驱动，列宽按比例铺满屏幕，不写死字段。
  */
 'use strict';
 
@@ -10,17 +13,11 @@ const $ = (sel) => document.querySelector(sel);
 const stage = $('#stage');
 const boardEl = $('#board');
 
-const STATUS = {
-  todo: { label: '待启动', color: 'var(--st-todo)' },
-  doing: { label: '进行中', color: 'var(--st-doing)' },
-  done: { label: '已完成', color: 'var(--st-done)' },
-  blocked: { label: '受阻', color: 'var(--st-blocked)' }
-};
-
-let current = null;              // 当前渲染的 board
-let lastKpi = { total: 0, doing: 0, done: 0, overall: 0 };
-const knownCardIds = new Set();  // 用于判断「新卡片」发光
-const marquees = [];             // 活动的自动滚动 rAF
+let current = null;
+let lastKpi = { total: 0, doing: 0, done: 0, overall: 0, teams: 0 };
+const knownRows = new Set();
+const marquees = [];
+const lastCells = new Map();     // rid → { colKey: value } 用于判断内容变化
 const previewMode = new URLSearchParams(location.search).has('preview');
 
 /* ═════════ 数据通道 ═════════ */
@@ -32,7 +29,6 @@ if (!previewMode && window.yuhox) {
     if (cmd.type === 'black') stage.classList.toggle('blacked', !!cmd.value);
   });
 } else {
-  // 预览模式：由控制台 postMessage 推送
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (d && d.type === 'yuhox-board' && d.board) applyBoard(d.board);
@@ -40,18 +36,18 @@ if (!previewMode && window.yuhox) {
 }
 
 function applyBoard(b) {
-  if (!b) return;
-  const prev = current;
+  if (!b || !Array.isArray(b.columns)) return;
   current = b;
-  render(b, prev);
+  render(b);
 }
 
-/* ═════════ 主题与设置 ═════════ */
+/* ═════════ 主题 ═════════ */
 
 function applyTheme(s) {
   const root = document.documentElement;
   root.style.setProperty('--ob-accent', s.accent || '#4f8cff');
   root.style.setProperty('--ob-accent2', s.accent2 || '#22d3ee');
+  root.style.setProperty('--st-doing', s.accent || '#4f8cff');
 }
 
 /* ═════════ 时钟 ═════════ */
@@ -105,14 +101,15 @@ function startParticles() {
     ctx.clearRect(0, 0, W, H);
     for (const d of dots) {
       d.x += d.vx; d.y += d.vy;
-      if (d.x < -20) d.x = W + 20; if (d.x > W + 20) d.x = -20;
-      if (d.y < -20) d.y = H + 20; if (d.y > H + 20) d.y = -20;
+      if (d.x < -20) d.x = W + 20;
+      if (d.x > W + 20) d.x = -20;
+      if (d.y < -20) d.y = H + 20;
+      if (d.y > H + 20) d.y = -20;
       ctx.beginPath();
       ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${d.a})`;
       ctx.fill();
     }
-    // 近距连线
     ctx.lineWidth = 0.5;
     for (let i = 0; i < dots.length; i++) {
       for (let j = i + 1; j < dots.length; j++) {
@@ -132,13 +129,12 @@ function startParticles() {
     requestAnimationFrame(frame);
   })();
 
-  // 主题色变化时刷新粒子颜色
   setInterval(syncAccent, 2000);
   syncAccent();
 }
 startParticles();
 
-/* ═════════ KPI 数字补间 ═════════ */
+/* ═════════ KPI ═════════ */
 
 function tweenNumber(el, from, to, dur = 900, suffix = '') {
   const t0 = performance.now();
@@ -150,209 +146,303 @@ function tweenNumber(el, from, to, dur = 900, suffix = '') {
   })(t0);
 }
 
-function computeKpi(tasks) {
-  const total = tasks.length;
-  const doing = tasks.filter((t) => t.status === 'doing' || t.status === 'blocked').length;
-  const done = tasks.filter((t) => t.status === 'done').length;
-  const overall = total ? Math.round(tasks.reduce((s, t) => s + t.progress, 0) / total) : 0;
-  return { total, doing, done, overall };
+function teamColumn(b) {
+  const texts = b.columns.filter((c) => c.type === 'text' && c.visible !== false);
+  return texts.find((c) => /队伍|班组|单位|施工队/.test(c.label)) ||
+    texts.find((c) => c.key === 'team') || texts[0] || null;
+}
+
+function computeKpi(b) {
+  const rows = b.rows || [];
+  const pcol = b.columns.find((c) => c.type === 'progress' && c.visible !== false);
+
+  const teamCol = teamColumn(b);
+  const teams = teamCol
+    ? new Set(rows.map((r) => String(r.cells[teamCol.key] || '').trim()).filter(Boolean)).size
+    : 0;
+
+  if (!pcol) {
+    return { total: rows.length, doing: 0, done: 0, overall: 0, teams, hasProgress: false };
+  }
+  const vals = rows.map((r) => Number(r.cells[pcol.key]) || 0);
+  return {
+    total: rows.length,
+    doing: vals.filter((v) => v > 0 && v < 100).length,
+    done: vals.filter((v) => v >= 100).length,
+    overall: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0,
+    teams,
+    hasProgress: true
+  };
 }
 
 function renderKpi(kpi) {
   tweenNumber($('#kpiTotal'), lastKpi.total, kpi.total);
-  tweenNumber($('#kpiDoing'), lastKpi.doing, kpi.doing);
-  tweenNumber($('#kpiDone'), lastKpi.done, kpi.done);
-  tweenNumber($('#kpiOverall'), lastKpi.overall, kpi.overall, 900, '%');
-  $('#kpiRing').style.setProperty('--p', kpi.overall);
-  // 三张卡的小进度条
-  const max = Math.max(1, kpi.total);
-  $('[data-kpi="total"] .kpi-spark i').style.width = '100%';
-  $('[data-kpi="doing"] .kpi-spark i').style.width = (kpi.doing / max * 100) + '%';
-  $('[data-kpi="done"] .kpi-spark i').style.width = (kpi.done / max * 100) + '%';
+  $('#kpiTeams').textContent = kpi.teams;
+
+  const cardDoing = $('[data-kpi="doing"]');
+  const cardDone = $('[data-kpi="done"]');
+  const cardRing = $('[data-kpi="overall"]');
+  const cardTeams = $('#kpiTeamsCard');
+
+  if (kpi.hasProgress) {
+    cardDoing.style.display = '';
+    cardDone.style.display = '';
+    cardRing.style.display = '';
+    cardTeams.style.display = 'none';
+    $('#kpi').style.gridTemplateColumns = '';
+
+    tweenNumber($('#kpiDoing'), lastKpi.doing, kpi.doing);
+    tweenNumber($('#kpiDone'), lastKpi.done, kpi.done);
+    tweenNumber($('#kpiOverall'), lastKpi.overall, kpi.overall, 900, '%');
+    $('#kpiRing').style.setProperty('--p', kpi.overall);
+
+    const max = Math.max(1, kpi.total);
+    $('[data-kpi="total"] .kpi-spark i').style.width = '100%';
+    $('[data-kpi="doing"] .kpi-spark i').style.width = (kpi.doing / max * 100) + '%';
+    $('[data-kpi="done"] .kpi-spark i').style.width = (kpi.done / max * 100) + '%';
+  } else {
+    cardDoing.style.display = 'none';
+    cardDone.style.display = 'none';
+    cardRing.style.display = 'none';
+    cardTeams.style.display = '';
+    $('#kpi').style.gridTemplateColumns = 'repeat(2, 1fr)';
+    $('[data-kpi="total"] .kpi-spark i').style.width = '100%';
+    cardTeams.querySelector('.kpi-spark i').style.width = '100%';
+  }
   lastKpi = kpi;
 }
 
-/* ═════════ 看板渲染 ═════════ */
+/* ═════════ 公共 ═════════ */
 
 function escapeHtml(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function ownerChip(owner) {
-  if (!owner) return '';
-  const initial = escapeHtml(owner.slice(0, 1).toUpperCase());
-  return `<span class="owner-chip"><b>${initial}</b>${escapeHtml(owner)}</span>`;
+function visibleColumns(b) {
+  return b.columns.filter((c) => c.visible !== false);
 }
 
-/** 卡片内部字段（新建时使用，进度条先 0 再过渡到目标值） */
-function cardFields(t) {
-  const st = STATUS[t.status] || STATUS.todo;
-  const note = (current.settings.showNote && t.note)
-    ? `<span class="card-note">${escapeHtml(t.note)}</span>` : '';
-  const blocked = t.status === 'blocked' ? '<span class="blocked-flag">受阻</span>' : '';
-  return `
-    <div class="card-name">${escapeHtml(t.name)}</div>
-    <div class="card-meta">${ownerChip(t.owner)}${note}${blocked}</div>
-    <div class="bar-row">
-      <div class="bar"><i class="${t.progress >= 100 ? 'done-stop' : ''}" style="width:0%"></i></div>
-      <span class="pct">0%</span>
-    </div>`;
+/** 主文字列：宽度最大的文字列，视觉上加粗 */
+function primaryTextKey(cols) {
+  const texts = cols.filter((c) => c.type === 'text');
+  if (!texts.length) return null;
+  return texts.reduce((a, b) => (b.width > a.width ? b : a), texts[0]).key;
 }
 
-/** 泳道卡片原地对账更新（保留元素，进度条走 CSS 过渡） */
-function updateCardInPlace(el, t) {
-  el.querySelector('.card-name').textContent = t.name;
-  el.querySelector('.card-meta').innerHTML =
-    ownerChip(t.owner) +
-    ((current.settings.showNote && t.note) ? `<span class="card-note">${escapeHtml(t.note)}</span>` : '') +
-    (t.status === 'blocked' ? '<span class="blocked-flag">受阻</span>' : '');
-  const bar = el.querySelector('.bar i');
-  bar.classList.toggle('done-stop', t.progress >= 100);
-  bar.style.width = t.progress + '%';
-  el.querySelector('.pct').textContent = t.progress + '%';
+function flash(cell) {
+  if (!cell) return;
+  cell.classList.remove('flash');
+  void cell.offsetWidth;
+  cell.classList.add('flash');
+  clearTimeout(cell._flashTimer);
+  cell._flashTimer = setTimeout(() => cell.classList.remove('flash'), 1200);
 }
 
-/** 卡片对账：容器内按 id 同步 DOM */
-function reconcileCards(container, tasks, isRow) {
-  const map = new Map();
-  for (const el of [...container.children]) {
-    if (el.dataset.tid) map.set(el.dataset.tid, el);
+function cellTag(col) {
+  if (col.type === 'index') return '<div class="td idx"></div>';
+  if (col.type === 'progress') {
+    return '<div class="td prog"><div class="bar"><i></i></div><span class="pct">0%</span></div>';
+  }
+  return '<div class="td txt"></div>';
+}
+
+function fillCell(cell, col, row, i, opts) {
+  const v = row.cells ? row.cells[col.key] : '';
+  if (col.type === 'index') {
+    cell.textContent = i + 1;
+    return;
+  }
+  if (col.type === 'progress') {
+    const n = Math.max(0, Math.min(100, Number(v) || 0));
+    const bar = cell.querySelector('.bar i');
+    bar.style.width = n + '%';
+    bar.classList.toggle('done-stop', n >= 100);
+    cell.querySelector('.pct').textContent = n + '%';
+    cell.classList.toggle('done', n >= 100);
+    cell.classList.toggle('idle', n === 0);
+    if (opts.changed) flash(cell);
+    return;
+  }
+  const text = String(v == null ? '' : v);
+  if (cell.textContent !== text) cell.textContent = text;
+  cell.classList.toggle('primary', opts.primary);
+  if (opts.changed) flash(cell);
+}
+
+/* ═════════ 表格版式 ═════════ */
+
+function ensureTableShell(cols) {
+  if (boardEl.dataset.mode !== 'table') {
+    boardEl.className = 'board table';
+    boardEl.innerHTML =
+      '<div class="tbl">' +
+        '<div class="tbl-head"></div>' +
+        '<div class="tbl-body"><div class="tbl-scroll"></div></div>' +
+      '</div>';
+    boardEl.dataset.mode = 'table';
+    knownRows.clear();
+    lastCells.clear();
+  }
+  const tpl = cols.map((c) => `minmax(0, ${Math.max(40, Math.round(c.width))}fr)`).join(' ');
+  boardEl.style.setProperty('--cols', tpl);
+}
+
+function renderTable(b) {
+  const cols = visibleColumns(b);
+  if (!cols.length) { renderEmpty(); return; }
+  ensureTableShell(cols);
+
+  const head = boardEl.querySelector('.tbl-head');
+  const sig = cols.map((c) => c.key + ':' + c.type + ':' + c.label).join('|');
+  if (head.dataset.sig !== sig) {
+    head.dataset.sig = sig;
+    head.innerHTML = cols.map((c) =>
+      `<div class="th ${c.type}">${escapeHtml(c.label)}</div>`).join('');
+  }
+
+  const scroll = boardEl.querySelector('.tbl-scroll');
+  const rows = b.rows || [];
+  const primary = primaryTextKey(cols);
+  const pcol = cols.find((c) => c.type === 'progress') || null;
+
+  const existing = new Map();
+  for (const el of [...scroll.children]) {
+    if (el.dataset.rid) existing.set(el.dataset.rid, el);
   }
   const keep = new Set();
 
-  tasks.forEach((t) => {
-    keep.add(t.id);
-    let el = map.get(t.id);
+  rows.forEach((r, i) => {
+    keep.add(r.id);
+    let el = existing.get(r.id);
     const isNew = !el;
     if (isNew) {
-      el = document.createElement(isRow ? 'div' : 'div');
-      el.className = isRow ? 'row-ob' : 'card-ob';
-      el.style.setProperty('--st', (STATUS[t.status] || STATUS.todo).color);
-      el.dataset.tid = t.id;
-      container.appendChild(el);
+      el = document.createElement('div');
+      el.className = 'tr';
+      el.dataset.rid = r.id;
+      el.style.animationDelay = (Math.min(i, 14) * 0.035) + 's';
+      el.innerHTML = cols.map(cellTag).join('');
+      el.dataset.sig = sig;
+      scroll.appendChild(el);
     }
-    if (isRow) {
-      const idx = tasks.indexOf(t);
-      el.classList.toggle('top1', idx === 0);
-      el.classList.toggle('top2', idx === 1);
-      el.classList.toggle('top3', idx === 2);
-      // 榜单行 = 排名 + 名称 + 条 + 百分比
-      if (!el.querySelector('.row-rank')) {
-        el.innerHTML = `
-          <div class="row-rank">${idx + 1}</div>
-          <div class="row-main">
-            <div class="card-name"></div>
-            <div class="row-meta-mini"></div>
-          </div>
-          <div class="bar"><i></i></div>
-          <div class="pct"></div>`;
-        requestAnimationFrame(() => {
-          const bi = el.querySelector('.bar i');
-          if (bi) bi.style.width = t.progress + '%';
-        });
-      }
-      el.querySelector('.row-rank').textContent = idx + 1;
-      el.querySelector('.card-name').textContent = t.name;
-      el.querySelector('.row-meta-mini').innerHTML =
-        ownerChip(t.owner) +
-        (current.settings.showNote && t.note ? `<span>${escapeHtml(t.note)}</span>` : '') +
-        (t.status === 'blocked' ? '<span class="blocked-flag">受阻</span>' : '');
-      const bi = el.querySelector('.bar i');
-      bi.classList.toggle('done-stop', t.progress >= 100);
-      bi.style.width = t.progress + '%';
-      el.querySelector('.pct').textContent = t.progress + '%';
-      // 榜单按进度排序：appendChild 把已有元素挪到正确位置
-      container.appendChild(el);
-    } else {
-      // 泳道卡片：原地对账更新，进度条保留 CSS 过渡
-      el.style.setProperty('--st', (STATUS[t.status] || STATUS.todo).color);
-      if (el.querySelector('.bar i')) {
-        updateCardInPlace(el, t);
-        container.appendChild(el);
-      } else {
-        el.innerHTML = cardFields(t);
-        container.appendChild(el);
-        requestAnimationFrame(() => {
-          const bi = el.querySelector('.bar i');
-          if (bi) bi.style.width = t.progress + '%';
-          const pct = el.querySelector('.pct');
-          if (pct) pct.textContent = t.progress + '%';
-        });
-      }
+
+    if (el.dataset.sig !== sig) {
+      el.innerHTML = cols.map(cellTag).join('');
+      el.dataset.sig = sig;
     }
-    if (isNew && !knownCardIds.has(t.id) && knownCardIds.size > 0) {
+
+    const prev = lastCells.get(r.id) || {};
+    const now = {};
+    cols.forEach((c, ci) => {
+      const cell = el.children[ci];
+      if (!cell) return;
+      const v = c.type === 'index' ? i : (r.cells ? r.cells[c.key] : '');
+      now[c.key] = v;
+      const changed = !isNew && knownRows.has(r.id) && prev[c.key] !== v;
+      fillCell(cell, c, r, i, { primary: c.key === primary, changed });
+    });
+    lastCells.set(r.id, now);
+    // 行首光条跟随进度状态：完成变绿，其余用主题色
+    const pv = pcol ? Number(r.cells[pcol.key]) || 0 : 0;
+    el.style.setProperty('--st', pcol && pv >= 100 ? 'var(--st-done)' : 'var(--ob-accent)');
+
+    if (isNew && knownRows.size > 0) {
       el.classList.add('glow');
       setTimeout(() => el.classList.remove('glow'), 1700);
     }
+    knownRows.add(r.id);
+    scroll.appendChild(el); // 保证顺序与数据一致
   });
 
-  // 移除消失的任务
-  for (const [id, el] of map) {
+  for (const [id, el] of existing) {
     if (!keep.has(id)) {
       el.classList.add('leaving');
-      setTimeout(() => el.remove(), 320);
+      lastCells.delete(id);
+      knownRows.delete(id);
+      setTimeout(() => el.remove(), 300);
     }
   }
+
+  stretchRows(scroll, rows.length);
 }
 
-function renderColumns(b, prev) {
-  boardEl.className = 'board columns';
-  if (boardEl.dataset.mode !== 'columns') {
-    boardEl.innerHTML = '';
-    boardEl.dataset.mode = 'columns';
-  }
-  const groups = [
-    { key: 'todo', label: '待启动' },
-    { key: 'doing', label: '进行中' },
-    { key: 'done', label: '已完成' }
-  ];
-  // 受阻卡片并入「进行中」列，用红色状态标识
-  const pick = (key) => b.tasks.filter((t) =>
-    key === 'doing' ? (t.status === 'doing' || t.status === 'blocked')
-      : key === 'done' ? t.status === 'done'
-      : t.status === 'todo');
-
-  groups.forEach((g, gi) => {
-    let col = boardEl.children[gi];
-    if (!col) {
-      col = document.createElement('div');
-      col.className = 'col';
-      col.style.animation = `fadeUp .6s ${0.15 + gi * 0.08}s ease both`;
-      col.innerHTML = `
-        <div class="col-head">
-          <div class="col-title"><i style="--st:${STATUS[g.key].color};background:${STATUS[g.key].color}"></i>${g.label}</div>
-          <div class="col-count">0</div>
-        </div>
-        <div class="col-body"><div class="col-scroll"></div></div>`;
-      boardEl.appendChild(col);
-    }
-    const tasks = pick(g.key);
-    col.querySelector('.col-count').textContent = tasks.length;
-    const body = col.querySelector('.col-body');
-    reconcileCards(col.querySelector('.col-scroll'), tasks, false);
-    // 空列占位，避免大片死黑
-    let empty = body.querySelector('.col-empty');
-    if (!tasks.length) {
-      if (!empty) {
-        empty = document.createElement('div');
-        empty.className = 'col-empty';
-        empty.textContent = '暂无任务';
-        body.appendChild(empty);
-      }
-    } else if (empty) {
-      empty.remove();
-    }
-  });
+/** 行数少时把行高撑开铺满可视区，避免大屏下方一大片空白 */
+function stretchRows(scroll, n, gapPx = 0) {
+  const body = scroll.parentElement;
+  if (!body || !n) return;
+  const base = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 14;
+  const usable = body.clientHeight - gapPx * (n - 1);
+  const h = Math.max(base * 3.2, Math.min(base * 7.4, usable / n));
+  scroll.style.setProperty('--row-h', Math.round(h) + 'px');
 }
 
-function renderList(b, prev) {
-  boardEl.className = 'board list';
+/* ═════════ 榜单版式 ═════════ */
+
+function renderList(b) {
+  const cols = visibleColumns(b);
+  const pcol = cols.find((c) => c.type === 'progress');
+  const texts = cols.filter((c) => c.type === 'text');
+  const nameCol = texts[0] || null;
+  const metaCols = texts.slice(1, 3);
+
+  if (!pcol || !nameCol) { renderTable(b); return; }
+
   if (boardEl.dataset.mode !== 'list') {
+    boardEl.className = 'board list';
     boardEl.innerHTML = '<div class="list-scroll"></div>';
     boardEl.dataset.mode = 'list';
+    knownRows.clear();
+    lastCells.clear();
   }
-  const tasks = [...b.tasks].sort((a, x) => x.progress - a.progress);
-  reconcileCards(boardEl.querySelector('.list-scroll'), tasks, true);
+
+  const rows = [...(b.rows || [])].sort((a, c) =>
+    (Number(c.cells[pcol.key]) || 0) - (Number(a.cells[pcol.key]) || 0));
+
+  const scroll = boardEl.querySelector('.list-scroll');
+  const existing = new Map();
+  for (const el of [...scroll.children]) if (el.dataset.rid) existing.set(el.dataset.rid, el);
+  const keep = new Set();
+
+  rows.forEach((r, i) => {
+    keep.add(r.id);
+    let el = existing.get(r.id);
+    const isNew = !el;
+    if (isNew) {
+      el = document.createElement('div');
+      el.className = 'row-ob';
+      el.dataset.rid = r.id;
+      el.innerHTML =
+        '<div class="row-rank"></div>' +
+        '<div class="row-main"><div class="card-name"></div><div class="row-meta-mini"></div></div>' +
+        '<div class="bar"><i></i></div><div class="pct"></div>';
+      scroll.appendChild(el);
+    }
+    el.classList.toggle('top1', i === 0);
+    el.classList.toggle('top2', i === 1);
+    el.classList.toggle('top3', i === 2);
+    el.querySelector('.row-rank').textContent = i + 1;
+    el.querySelector('.card-name').textContent = r.cells[nameCol.key] || '—';
+    el.querySelector('.row-meta-mini').innerHTML = metaCols
+      .map((c) => `<span>${escapeHtml(r.cells[c.key] || '')}</span>`)
+      .filter((s) => s !== '<span></span>').join('');
+    const n = Math.max(0, Math.min(100, Number(r.cells[pcol.key]) || 0));
+    const bar = el.querySelector('.bar i');
+    bar.style.width = n + '%';
+    bar.classList.toggle('done-stop', n >= 100);
+    el.querySelector('.pct').textContent = n + '%';
+    scroll.appendChild(el);
+    knownRows.add(r.id);
+  });
+
+  for (const [id, el] of existing) {
+    if (!keep.has(id)) {
+      el.classList.add('leaving');
+      knownRows.delete(id);
+      setTimeout(() => el.remove(), 300);
+    }
+  }
+
+  stretchRows(scroll, rows.length, (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 14) * 0.9);
 }
 
 function renderEmpty() {
@@ -369,26 +459,36 @@ function stopMarquees() {
   marquees.forEach((m) => cancelAnimationFrame(m.raf));
   marquees.length = 0;
   document.querySelectorAll('.mq-vdup').forEach((n) => n.remove());
-  document.querySelectorAll('.col-scroll, .list-scroll').forEach((n) => { n.style.transform = ''; });
+  document.querySelectorAll('.col-scroll, .list-scroll, .tbl-scroll').forEach((n) => {
+    n.style.transform = '';
+  });
 }
 
 function setupMarquees(speedSetting) {
   stopMarquees();
   if (!current.settings.autoScroll) return;
-  const wrappers = boardEl.querySelectorAll('.col-body, .board.list');
+  const wrappers = boardEl.querySelectorAll('.col-body, .board.list, .tbl-body');
   wrappers.forEach((wrap) => {
-    const inner = wrap.querySelector('.col-scroll, .list-scroll');
+    const inner = wrap.querySelector('.col-scroll, .list-scroll, .tbl-scroll');
     if (!inner || inner.scrollHeight <= wrap.clientHeight + 4) return;
+
     const dup = inner.cloneNode(true);
     dup.classList.add('mq-vdup');
+    dup.style.paddingTop = '0';
     wrap.appendChild(dup);
+
+    const pxPerMs = Math.max(8, Number(speedSetting) || 36) / 1000;
+    const pauseUntil = performance.now() + 2600;
+    const m = { raf: 0 };
     const state = { y: 0 };
-    const speed = Math.max(8, Number(speedSetting) || 36) / 60; // px per frame(60fps)
-    // 数据更新后先停在开头 2.5 秒，让人看清新内容
-    const pauseUntil = performance.now() + 2500;
+    let lastT = 0;
+
+    // 按真实时间推进（而不是按帧计数），窗口被节流时速度也一致
     function frame(t) {
+      const dt = lastT ? Math.min(400, t - lastT) : 16.7;
+      lastT = t;
       if (t > pauseUntil) {
-        state.y += speed;
+        state.y += pxPerMs * dt;
         const half = inner.scrollHeight;
         if (state.y >= half) state.y -= half;
         inner.style.transform = `translateY(${-state.y}px)`;
@@ -396,7 +496,6 @@ function setupMarquees(speedSetting) {
       }
       m.raf = requestAnimationFrame(frame);
     }
-    const m = { raf: 0 };
     marquees.push(m);
     m.raf = requestAnimationFrame(frame);
   });
@@ -408,6 +507,7 @@ function renderTicker() {
   const wrap = $('#ticker');
   const inner = $('#tickerInner');
   const items = (current.settings.tickers || []).filter(Boolean);
+  wrap.querySelectorAll('.mq-hdup').forEach((n) => n.remove());
   if (!items.length) {
     wrap.classList.add('hidden');
     inner.innerHTML = '';
@@ -415,14 +515,11 @@ function renderTicker() {
   }
   wrap.classList.remove('hidden');
   inner.innerHTML = items.map((s) => `<span>${escapeHtml(s)}</span>`).join('');
-  // 无缝循环：内容不够宽就复制一份
-  inner.querySelectorAll('.mq-hdup').forEach((n) => n.remove());
   if (inner.scrollWidth > wrap.clientWidth) {
     const dup = inner.cloneNode(true);
     dup.classList.add('mq-hdup');
     dup.removeAttribute('id');
     wrap.appendChild(dup);
-    // 字幕跑马灯交给 CSS 动画
     const styleId = 'ticker-mq-style';
     if (!document.getElementById(styleId)) {
       const st = document.createElement('style');
@@ -439,7 +536,7 @@ function renderTicker() {
 
 /* ═════════ 总渲染 ═════════ */
 
-function render(b, prev) {
+function render(b) {
   applyTheme(b.settings);
 
   $('#obTitle').textContent = b.title || 'YUHOX BOARD';
@@ -448,20 +545,18 @@ function render(b, prev) {
   $('#clockTime').style.display = b.settings.showClock ? '' : 'none';
   $('#clockDate').style.display = b.settings.showClock ? '' : 'none';
 
-  // KPI 总览开关
   $('#kpi').style.display = b.settings.showSummary ? '' : 'none';
+  renderKpi(computeKpi(b));
 
-  const kpi = computeKpi(b.tasks);
-  renderKpi(kpi);
-
-  if (!b.tasks.length) {
+  if (!b.rows || !b.rows.length) {
     renderEmpty();
   } else if (b.settings.layout === 'list') {
-    renderList(b, prev);
+    renderList(b);
   } else {
-    renderColumns(b, prev);
+    renderTable(b);
   }
 
+  boardEl.classList.toggle('no-zebra', b.settings.zebra === false);
   renderTicker();
   requestAnimationFrame(() => setupMarquees(b.settings.scrollSpeed));
 }

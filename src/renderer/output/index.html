@@ -14,6 +14,16 @@
   <canvas id="fx"></canvas>
   <div class="aurora"><i></i><i></i><i></i></div>
   <div class="grid-overlay"></div>
+
+  <!-- 装饰层：光带 / 雷达环 / 扫描线 / 四角边框 -->
+  <div class="deco">
+    <div class="beams"><i></i><i></i><i></i></div>
+    <div class="radar"><span></span></div>
+    <div class="scan"></div>
+    <div class="frame"><i></i><i></i><i></i><i></i></div>
+    <div class="hud-dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+
   <div class="vignette"></div>
 
   <!-- 内容 -->
@@ -22,6 +32,7 @@
       <div class="ob-head-left">
         <h1 id="obTitle">YUHOX BOARD</h1>
         <div id="obSub" class="ob-sub"></div>
+        <div class="head-rule"><i></i></div>
       </div>
       <div class="ob-head-right">
         <div class="live" id="liveBadge"><i></i>LIVE</div>
@@ -32,8 +43,13 @@
 
     <section class="kpi" id="kpi">
       <div class="kpi-card" data-kpi="total">
-        <div class="kpi-label">任务总数</div>
+        <div class="kpi-label">施工项</div>
         <div class="kpi-value" id="kpiTotal">0</div>
+        <div class="kpi-spark"><i></i></div>
+      </div>
+      <div class="kpi-card teams" data-kpi="teams" id="kpiTeamsCard" style="display:none">
+        <div class="kpi-label">参与队伍</div>
+        <div class="kpi-value" id="kpiTeams">0</div>
         <div class="kpi-spark"><i></i></div>
       </div>
       <div class="kpi-card doing" data-kpi="doing">
@@ -48,7 +64,7 @@
       </div>
       <div class="kpi-card ring-card" data-kpi="overall">
         <div class="ring" id="kpiRing"><span id="kpiOverall">0%</span></div>
-        <div class="kpi-label">整体进度</div>
+        <div class="kpi-label">平均进度</div>
       </div>
     </section>
 

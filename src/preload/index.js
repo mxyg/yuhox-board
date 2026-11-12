@@ -26,6 +26,18 @@ contextBridge.exposeInMainWorld('yuhox', {
   pickFile: () => ipcRenderer.invoke('file:pick'),
   exportBoard: () => ipcRenderer.invoke('file:export'),
 
+  // 开机自启 / 托盘
+  getAutoLaunch: () => ipcRenderer.invoke('autolaunch:get'),
+  setAutoLaunch: (v) => ipcRenderer.invoke('autolaunch:set', v),
+
+  // 输入历史（自动补全）
+  addDict: (key, value) => ipcRenderer.invoke('dict:add', { key, value }),
+  mergeDict: (key, values) => ipcRenderer.invoke('dict:merge', { key, values }),
+
+  // Excel
+  exportExcel: () => ipcRenderer.invoke('excel:export'),
+  importExcel: () => ipcRenderer.invoke('excel:import'),
+
   // 主进程广播
   onBoardUpdated: (cb) => ipcRenderer.on('board:updated', (_e, b) => cb(b)),
   onStatusUpdated: (cb) => ipcRenderer.on('status:updated', (_e, s) => cb(s)),

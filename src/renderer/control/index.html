@@ -25,7 +25,7 @@
         <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></svg></span><span>上屏控制</span>
       </button>
       <button class="nav-item" data-panel="content">
-        <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="7" height="17" rx="1.8"/><rect x="14" y="3.5" width="7" height="10" rx="1.8"/></svg></span><span>看板内容</span>
+        <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="7" height="17" rx="1.8"/><rect x="14" y="3.5" width="7" height="10" rx="1.8"/></svg></span><span>数据表</span>
       </button>
       <button class="nav-item" data-panel="data">
         <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M7.05 7.05a7 7 0 0 0 0 9.9M16.95 16.95a7 7 0 0 0 0-9.9M4.2 4.2a11 11 0 0 0 0 15.6M19.8 19.8a11 11 0 0 0 0-15.6"/></svg></span><span>实时数据源</span>
@@ -84,6 +84,10 @@
           <div class="split-right">
             <div class="card preview-card">
               <div class="card-head"><h2>大屏预览</h2><span class="badge on"><span class="dot"></span>实时</span></div>
+              <div class="quick-edit">
+                <input id="inpTitle2" maxlength="60" placeholder="主标题（大屏左上角）" />
+                <input id="inpSubtitle2" maxlength="80" placeholder="副标题" />
+              </div>
               <div class="preview-stage">
                 <iframe id="previewFrame" src="../output/index.html?preview=1" title="大屏预览"></iframe>
               </div>
@@ -92,34 +96,57 @@
         </div>
       </section>
 
-      <!-- ───── 面板：看板内容 ───── -->
+      <!-- ───── 面板：数据表 ───── -->
       <section class="panel" id="panel-content">
         <div class="card">
           <div class="card-head"><h2>标题区</h2></div>
           <div class="field-row">
-            <label>主标题<input id="inpTitle" maxlength="60" placeholder="项目交付进度看板" /></label>
-            <label>副标题<input id="inpSubtitle" maxlength="80" placeholder="YUHOX · 实时任务动态" /></label>
+            <label>主标题<input id="inpTitle" maxlength="60" placeholder="施工动态总览" /></label>
+            <label>副标题<input id="inpSubtitle" maxlength="80" placeholder="YUHOX · 现场实时进度" /></label>
           </div>
           <div class="field-row">
-            <label class="grow">底部滚动字幕（每行一条，可留空）<textarea id="inpTickers" rows="2" placeholder="例如：每周五 17:00 例会同步进度"></textarea></label>
+            <label class="grow">底部滚动字幕（每行一条，可留空）<textarea id="inpTickers" rows="2" placeholder="例如：今日 17:00 现场安全例会"></textarea></label>
           </div>
         </div>
 
         <div class="card">
           <div class="card-head">
-            <h2>任务列表</h2>
+            <h2>施工数据表</h2>
             <div class="head-actions">
-              <button class="btn small" id="btnSample">载入示例</button>
-              <button class="btn small primary" id="btnAddTask">＋ 新增任务</button>
+              <button class="btn small" id="btnImportExcel">导入 Excel</button>
+              <button class="btn small" id="btnExportExcel">导出 Excel</button>
+              <button class="btn small" id="btnCols">列设置</button>
+              <button class="btn small primary" id="btnAddRow">＋ 新增一行</button>
             </div>
           </div>
-          <div class="task-legend">
-            <span><i class="lg lg-todo"></i>待启动</span>
-            <span><i class="lg lg-doing"></i>进行中</span>
-            <span><i class="lg lg-done"></i>已完成</span>
-            <span><i class="lg lg-blocked"></i>受阻</span>
+          <div class="te-wrap">
+            <div class="te-head" id="teHead"><!-- JS 渲染 --></div>
+            <div class="te-body" id="teBody"><!-- JS 渲染 --></div>
           </div>
-          <div class="task-list" id="taskList"><!-- JS 渲染 --></div>
+          <div class="te-foot">
+            <span id="teCount">0 行</span>
+            <span class="te-hint">输入时会自动匹配以前填过的内容（↑↓ 选择，回车填入）</span>
+          </div>
+        </div>
+
+        <div class="card" id="colCard" style="display:none">
+          <div class="card-head">
+            <h2>列设置</h2>
+            <div class="head-actions">
+              <input id="inpNewCol" class="inp-sm" maxlength="20" placeholder="新列名称" />
+              <select id="selNewColType" class="inp-sm">
+                <option value="text">文字</option>
+                <option value="progress">进度</option>
+                <option value="index">序号</option>
+              </select>
+              <button class="btn small primary" id="btnAddCol">＋ 添加列</button>
+              <button class="btn small" id="btnResetCols">恢复默认</button>
+            </div>
+          </div>
+          <div class="col-list" id="colList"><!-- JS 渲染 --></div>
+          <div class="te-foot">
+            <span class="te-hint">改列头、调列序、调宽度、增删列都在这里；删除列会同时删掉该列数据。</span>
+          </div>
         </div>
       </section>
 
@@ -143,13 +170,19 @@
 Content-Type: application/json
 
 {
-  "tasks": [
-    { "name": "装修施工", "owner": "工程部", "status": "doing", "progress": 72, "note": "三层封顶" },
-    { "name": "设备采购", "owner": "采购部", "status": "done",  "progress": 100 }
+  "title": "施工动态总览",
+  "rows": [
+    {
+      "team": "一号施工队",
+      "act": "三层顶板钢筋绑扎",
+      "prog": 72,
+      "proc": "钢筋工程"
+    }
   ]
 }
 
-# status: todo / doing / done / blocked
+# team / act / prog / proc 是列的 key（可在「列设置」里改）
+# 只想改数据就传 rows；要改列结构再带上 columns
 # GET /api/board 读取 · GET /api/health 健康检查</pre>
             <button class="btn small" id="btnCopyApi">复制接口说明</button>
           </div>
@@ -172,10 +205,12 @@ Content-Type: application/json
           </div>
 
           <div class="card">
-            <div class="card-head"><h2>导入 / 导出</h2></div>
-            <p class="desc">当前看板配置可导出为 JSON 留档，或在新机器上直接沿用。</p>
+            <div class="card-head"><h2>Excel 与备份</h2></div>
+            <p class="desc">表头和列序一并导出；导入时按表头自动匹配列，多出来的列会自动新建。</p>
             <div class="head-actions">
-              <button class="btn small" id="btnExport">导出当前数据</button>
+              <button class="btn small primary" id="btnExportExcel2">导出 Excel</button>
+              <button class="btn small" id="btnImportExcel2">导入 Excel</button>
+              <button class="btn small" id="btnExport">导出 JSON</button>
               <button class="btn small" id="btnGotoContent">手动编辑 →</button>
             </div>
           </div>
@@ -199,18 +234,27 @@ Content-Type: application/json
             <div class="field-row">
               <label>展示模式
                 <select id="selLayout">
-                  <option value="columns">泳道看板（按状态分列）</option>
-                  <option value="list">进度榜单（全宽进度条）</option>
+                  <option value="table">施工数据表（多列明细）</option>
+                  <option value="list">进度榜单（按进度排序）</option>
                 </select>
               </label>
             </div>
             <div class="switch-grid">
               <label class="switch"><input type="checkbox" id="swClock" /><i></i>显示时钟</label>
               <label class="switch"><input type="checkbox" id="swSummary" /><i></i>显示总览指标</label>
-              <label class="switch"><input type="checkbox" id="swNote" /><i></i>显示任务备注</label>
+              <label class="switch"><input type="checkbox" id="swZebra" /><i></i>隔行底色</label>
               <label class="switch"><input type="checkbox" id="swScroll" /><i></i>内容溢出自动滚动</label>
             </div>
             <label class="slider-row">滚动速度 <input type="range" id="rngSpeed" min="10" max="80" value="36" /><span id="lblSpeed">36 px/s</span></label>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>启动与托盘</h2></div>
+            <p class="desc">常驻托盘：关掉窗口不会退出，大屏照常推送；点托盘图标随时唤回控制台。</p>
+            <div class="switch-grid">
+              <label class="switch"><input type="checkbox" id="swAutoLaunch" /><i></i>开机自动启动</label>
+            </div>
+            <p class="desc" id="autoLaunchTip">开机后自动在托盘待命，不弹窗打扰。</p>
           </div>
 
           <div class="card">
@@ -227,6 +271,30 @@ Content-Type: application/json
 
 <!-- 行内提示 -->
 <div class="toast" id="toast"></div>
+
+<!-- 输入自动补全 -->
+<div class="ac-pop" id="acPop"></div>
+
+<!-- 导入 Excel 确认 -->
+<div class="modal-mask" id="importMask">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>导入 Excel</h3>
+      <button class="modal-x" id="impClose" title="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="imp-file" id="impFile"></div>
+      <div class="imp-summary" id="impSummary"></div>
+      <div class="imp-cols" id="impCols"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="modal-tip">导入后仍可用「列设置」调整</span>
+      <button class="btn small" id="impCancel">取消</button>
+      <button class="btn small" id="impAppend">追加到末尾</button>
+      <button class="btn small primary" id="impReplace">覆盖当前数据</button>
+    </div>
+  </div>
+</div>
 
 <script src="control.js"></script>
 </body>
