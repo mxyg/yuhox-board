@@ -1,0 +1,13 @@
+node_modules/
+release/
+dist/
+out/
+test/*.png
+docs/images/output-*.png
+docs/images/control-*.png
+.DS_Store
+*.log
+npm-debug.log*
+.env
+.workbuddy/
+src/renderer/**/*.map
