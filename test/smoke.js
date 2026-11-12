@@ -8,46 +8,8 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-const COLUMNS = [
-  { key: 'idx', label: '序号', type: 'index', width: 60, visible: true },
-  { key: 'team', label: '施工队伍', type: 'text', width: 150, visible: true },
-  { key: 'act', label: '施工动态', type: 'text', width: 290, visible: true },
-  { key: 'prog', label: '施工进度', type: 'progress', width: 190, visible: true },
-  { key: 'proc', label: '施工工序', type: 'text', width: 130, visible: true }
-];
-
-const RAW = [
-  ['一号施工队', '三层顶板钢筋绑扎', 72, '钢筋工程'],
-  ['二号施工队', '地下室剪力墙模板安装', 55, '模板工程'],
-  ['机电班', '一层桥架敷设与穿线', 38, '机电安装'],
-  ['三号施工队', '二层梁板混凝土浇筑', 100, '混凝土工程'],
-  ['防水班', '屋面防水卷材铺贴', 20, '防水工程'],
-  ['四号施工队', '外脚手架搭设与验收', 88, '脚手架工程'],
-  ['机电班', '消防管道压力试验', 0, '消防工程'],
-  ['二号施工队', '四层砌体工程样板段', 46, '砌体工程']
-];
-
-const SAMPLE = {
-  version: 2,
-  title: '施工动态总览',
-  subtitle: 'YUHOX · 现场实时进度',
-  columns: COLUMNS,
-  rows: RAW.map((r, i) => ({
-    id: 'r' + (i + 1),
-    cells: { team: r[0], act: r[1], prog: r[2], proc: r[3] }
-  })),
-  dict: {
-    team: ['一号施工队', '二号施工队', '三号施工队', '四号施工队', '机电班', '防水班'],
-    act: ['三层顶板钢筋绑扎', '地下室剪力墙模板安装', '一层桥架敷设与穿线'],
-    proc: ['钢筋工程', '模板工程', '机电安装', '混凝土工程']
-  },
-  settings: {
-    accent: '#4f8cff', accent2: '#22d3ee',
-    showClock: true, showSummary: true, zebra: true, autoScroll: true,
-    scrollSpeed: 36, layout: 'table',
-    tickers: ['数据实时同步 · 控制台编辑 / HTTP 推送 / Excel 导入', '今日 17:00 现场安全例会']
-  }
-};
+/* 默认数据直接取主进程 store 的示例，保证截图和软件开箱一致 */
+const SAMPLE = require('../src/main/store').sampleBoard();
 
 const errors = [];
 
@@ -82,7 +44,7 @@ ipcMain.handle('status:get', () => ({
       { accel: 'CommandOrControl+Alt+S', label: 'Ctrl + Alt + S' }
     ]
   },
-  version: '1.2.0'
+  version: '1.3.0'
 }));
 
 function watch(win, tag) {
@@ -109,31 +71,28 @@ app.whenReady().then(async () => {
   watch(out, 'output');
   await out.loadFile(path.join(__dirname, '../src/renderer/output/index.html'), { query: { preview: '1' } });
   await new Promise((r) => setTimeout(r, 1200));
-  await out.webContents.executeJavaScript(`window.postMessage({ type: 'yuhox-board', board: ${JSON.stringify(SAMPLE)} }, '*')`);
+  const TAB = { ...SAMPLE, settings: { ...SAMPLE.settings, layout: 'table' } };
+  await out.webContents.executeJavaScript(`window.postMessage({ type: 'yuhox-board', board: ${JSON.stringify(TAB)} }, '*')`);
   await new Promise((r) => setTimeout(r, 2600));
   await shot(out, 'screen-table.png');
 
-  // 榜单模式
+  // 默认卡片版式（推荐画面）
   await out.webContents.executeJavaScript(
-    `window.postMessage({ type: 'yuhox-board', board: ${JSON.stringify({ ...SAMPLE, settings: { ...SAMPLE.settings, layout: 'list' } })} }, '*')`
+    `window.postMessage({ type: 'yuhox-board', board: ${JSON.stringify(SAMPLE)} }, '*')`
   );
-  await new Promise((r) => setTimeout(r, 2200));
+  await new Promise((r) => setTimeout(r, 2400));
   await shot(out, 'screen-list.png');
 
-  // 很长内容 + 自定义列（验证滚动与列宽比例）
+  // 很长内容（验证多列挤压与自动滚动）
   const custom = {
     ...SAMPLE,
-    columns: [
-      { key: 'idx', label: '序号', type: 'index', width: 60, visible: true },
-      { key: 'team', label: '施工队伍', type: 'text', width: 130, visible: true },
-      { key: 'act', label: '施工动态', type: 'text', width: 320, visible: true },
-      { key: 'prog', label: '施工进度', type: 'progress', width: 170, visible: true },
-      { key: 'proc', label: '施工工序', type: 'text', width: 120, visible: true },
-      { key: 'zone', label: '作业区域', type: 'text', width: 120, visible: true }
-    ],
     rows: SAMPLE.rows.concat(SAMPLE.rows.map((r, i) => ({
       id: 'x' + i,
-      cells: { ...r.cells, act: r.cells.act + '（跨区协同作业，含材料转运与成品保护）', zone: 'A 区' }
+      cells: {
+        ...r.cells,
+        status: (r.cells.status || '') + '（含下泵、洗井、试压，资料待交接）',
+        note: '四级'
+      }
     }))),
     settings: { ...SAMPLE.settings, layout: 'table', scrollSpeed: 46 }
   };

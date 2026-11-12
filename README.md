@@ -4,25 +4,28 @@
 
 **一块大屏，实时数据，一眼看完。**
 
-开源免费的实时屏幕数据动态显示软件。控制台留在主屏，画面全屏钉到你指定的任意一块显示器上；施工队伍、施工动态、完成进度，改一个字、推一条数据，大屏立刻跟着动。
+开源免费的实时屏幕数据动态显示软件。控制台留在主屏，画面全屏钉到你指定的任意一块显示器上；井号、施工项目、完成情况，改一个字、推一条数据，大屏立刻跟着动。
+
+开箱自带一份《金宇建安小修作业》示例表（小队 / 原井号 / 施工项目 / 区域 / 施工进度 / 新井号 / 新施工项目 / 新区域 / 备注），删掉换成自己的数据即可。
 
 - 平台：Windows 10/11（x64），macOS / Linux 亦可运行
 - 许可：MIT，商用免费，可二次开发
 - 依赖：无服务端、无账号、无联网要求，素材与数据全部本地
 
-![大屏施工数据表](docs/images/screen-table.jpg)
+![大屏竖向列表](docs/images/screen-list.jpg)
 
 ## 它能做什么
 
 | 能力 | 说明 |
 |---|---|
 | 指定显示器上屏 | 枚举所有显示器，选一块全屏输出；控制台仍在主屏，边改边看 |
-| 列完全自定义 | 列头可改名、可拖拽调序、鼠标拖列缝调列宽、可增可删；序号列自动编号 |
-| 单元格类型 | 文本列 + 进度列（输入 0–100，大屏自动画进度条并按完成度标色） |
-| 手机遥控 | 同一 Wi-Fi 下手机浏览器打开即用，改动态、拖进度、改标题，无需装 App，可设口令 |
+| 列完全自定义 | 列头可改名、可拖拽调序、鼠标拖列缝调列宽、可增可删 |
+| 单元格类型 | 文本列 + 进度列（输入 0–100，大屏自动画进度条并按完成度标色）；进度列也可以直接填「完井 / 待定」这类状态文字 |
+| 手机遥控 | 同一 Wi-Fi 下手机浏览器打开即用，改状态、拖进度、改标题，无需装 App，可设口令 |
 | 三种实时数据通道 | 控制台手动编辑 / HTTP 接口推送 / JSON 文件监听，局域网任何机器都能推 |
-| 两种大屏版式 | 施工数据表（多列明细）、进度榜单（按进度排序） |
-| 输入自动补全 | 填过的队伍、工序、动态自动记进历史，下次输入即刻联想 |
+| 两种大屏版式 | 竖向列表（默认，一行一条，可直接拖动排序）、整表（多列明细，像 Excel） |
+| 自动滚动 | 内容超出屏高时首尾相连循环滚动，速度可调；拖动排序时自动暂停 |
+| 输入自动补全 | 填过的井号、项目、区域自动记进历史，下次输入即刻联想 |
 | Excel 互通 | 一键导出（表头与列宽一并导出）；导入按表头自动匹配列，陌生列自动新建 |
 | 动态视觉 | 粒子与极光背景、流光光束、雷达环、扫描线、HUD 边角、标题扫光、行变更闪烁 |
 | 长期驻留 | 开机自动启动（默认开）、启动自动回到上次大屏、托盘常驻、关窗不退出 |
@@ -30,7 +33,9 @@
 
 主标题、副标题随时可改，控制台顶部和大屏左侧两个输入框任选其一，改完即刻同步。
 
-![进度榜单](docs/images/screen-list.jpg)
+默认是竖向列表，一行一条，待办 / 进行 / 完成用标签颜色区分；需要一次看全所有列时，切到「整表」版式：
+
+![整表版式](docs/images/screen-table.jpg)
 
 ![控制台](docs/images/control.jpg)
 
@@ -45,7 +50,7 @@
 1. 双击打开，控制台出现在主屏。
 2. 「上屏控制」里选中目标显示器（点「识别显示器」会在每块屏上闪编号）。
 3. 点「上屏」，画面全屏铺满那块屏。
-4. 「看板内容」里逐格编辑数据，大屏实时跟随。
+4. 「数据表」里逐格编辑数据，大屏实时跟随。
 
 装完默认已开启「开机自动启动」：之后开机程序在右下角托盘待命，双击托盘图标唤出控制台，右键托盘可直接切屏、黑屏、撤屏、退出。
 
@@ -55,7 +60,7 @@
 
 1. 控制台「实时数据源」里能看到一串地址，形如 `http://192.168.1.23:7788/m`
 2. 手机连同一个 Wi-Fi，浏览器打开这个地址
-3. 直接改：加/减 10% 进度、一键「完成」、改施工动态与队伍、改主副标题，改完立刻上大屏
+3. 直接改：点状态标签一键切换「完井 / 待定」等、加/减 10% 进度、改井号项目区域、改主副标题，改完立刻上大屏
 
 人多眼杂的现场建议在同一个卡片里设个 4–12 位口令，手机首次打开需要输入。推送接口默认随软件启动，端口可在同一页改。
 
@@ -97,11 +102,11 @@ npm run dist:win     # 产物在 release/：NSIS 安装包 + 便携版
 curl -X POST http://192.168.1.10:7788/api/board \
   -H 'Content-Type: application/json' \
   -d '{
-    "title": "施工动态总览",
-    "subtitle": "三号楼 · 当班",
+    "title": "金宇建安小修作业",
+    "subtitle": "2026-11-12 · 当班",
     "rows": [
-      { "team": "一号施工队", "act": "三层顶板钢筋绑扎", "prog": 72, "proc": "钢筋工程" },
-      { "team": "机电班", "act": "一层桥架敷设与穿线", "prog": 38, "proc": "机电安装" }
+      { "team": "1", "well": "杜813-34-45", "job": "热采", "zone": "欢采",
+        "status": "完井", "newWell": "杜813-40-33", "newJob": "下泵", "newZone": "欢采", "note": "三级" }
     ]
   }'
 ```
@@ -113,7 +118,7 @@ curl http://192.168.1.10:7788/api/board
 # 只改某一行的一个单元格（手机遥控走的就是这条，不会覆盖别处改动）
 curl -X POST http://192.168.1.10:7788/api/board \
   -H 'Content-Type: application/json' \
-  -d '{ "rowPatch": { "id": "r1", "cells": { "prog": 88 } } }'
+  -d '{ "rowPatch": { "id": "r1", "cells": { "status": "下泵管完 待校深" } } }'
 
 # 健康检查
 curl http://192.168.1.10:7788/api/health
@@ -122,8 +127,8 @@ curl http://192.168.1.10:7788/api/health
 手机遥控页：浏览器打开 `http://192.168.1.10:7788/m`（`/` 会自动跳过去）。
 设了口令后，接口需要带 `x-board-pin` 请求头或 `?pin=xxxx`。
 
-`rows` 里的键就是列 `key`（默认 `team` / `act` / `prog` / `proc`，`idx` 为自动序号列）。
-`prog` 为 0–100 的整数，非数字会被清洗后钳到区间内。
+`rows` 里的键就是列 `key`（默认 `team` / `well` / `job` / `zone` / `status` / `newWell` / `newJob` / `newZone` / `note`）。
+进度列（`type: "progress"`）的值是 0–100 的整数，非数字会被清洗后钳到区间内。
 
 网页端可以直接调（接口已开 CORS）：
 
@@ -131,7 +136,7 @@ curl http://192.168.1.10:7788/api/health
 await fetch('http://192.168.1.10:7788/api/board', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ rows: [{ team: '三号施工队', act: '四层砌体样板段', prog: 46, proc: '砌体工程' }] })
+  body: JSON.stringify({ rows: [{ well: '杜80-28-K54', job: '热采', zone: '1区新5', status: '完井' }] })
 });
 ```
 
@@ -141,7 +146,7 @@ await fetch('http://192.168.1.10:7788/api/board', {
 
 ```json
 [
-  { "team": "焊接班", "act": "管道焊接", "prog": 55, "proc": "焊接工程" }
+  { "well": "杜813-34-45", "job": "热采", "zone": "欢采", "status": "完井", "note": "三级" }
 ]
 ```
 
@@ -151,19 +156,24 @@ await fetch('http://192.168.1.10:7788/api/board', {
 
 ```json
 {
-  "title": "施工动态总览",
-  "subtitle": "YUHOX · 现场实时进度",
+  "title": "金宇建安小修作业",
+  "subtitle": "现场实时进度 · 实时更新",
   "columns": [
-    { "key": "idx",  "label": "序号",     "type": "index",    "width": 60,  "visible": true },
-    { "key": "team", "label": "施工队伍", "type": "text",     "width": 150, "visible": true },
-    { "key": "act",  "label": "施工动态", "type": "text",     "width": 290, "visible": true },
-    { "key": "prog", "label": "施工进度", "type": "progress", "width": 190, "visible": true },
-    { "key": "proc", "label": "施工工序", "type": "text",     "width": 130, "visible": true }
+    { "key": "team",    "label": "小队",       "type": "text", "width": 96,  "visible": true },
+    { "key": "well",    "label": "原井号",     "type": "text", "width": 150, "visible": true },
+    { "key": "job",     "label": "施工项目",   "type": "text", "width": 120, "visible": true },
+    { "key": "zone",    "label": "区域",       "type": "text", "width": 92,  "visible": true },
+    { "key": "status",  "label": "施工进度",   "type": "text", "width": 232, "visible": true },
+    { "key": "newWell", "label": "新井号",     "type": "text", "width": 150, "visible": true },
+    { "key": "newJob",  "label": "新施工项目", "type": "text", "width": 120, "visible": true },
+    { "key": "newZone", "label": "新区域",     "type": "text", "width": 92,  "visible": true },
+    { "key": "note",    "label": "备注",       "type": "text", "width": 84,  "visible": true }
   ],
   "rows": [
-    { "id": "r1", "cells": { "team": "一号施工队", "act": "三层顶板钢筋绑扎", "prog": 72, "proc": "钢筋工程" } }
+    { "id": "r1", "cells": { "team": "1", "well": "杜813-34-45", "job": "热采", "zone": "欢采",
+                             "status": "完井", "newWell": "杜813-40-33", "newJob": "下泵", "newZone": "欢采", "note": "三级" } }
   ],
-  "dict": { "team": ["一号施工队", "机电班"] },
+  "dict": { "job": ["热采", "检泵", "重新完井"] },
   "settings": {
     "accent": "#4f8cff",
     "accent2": "#22d3ee",
@@ -172,7 +182,7 @@ await fetch('http://192.168.1.10:7788/api/board', {
     "zebra": true,
     "autoScroll": true,
     "scrollSpeed": 36,
-    "layout": "table",
+    "layout": "list",
     "fontScale": 1,
     "autoLaunch": true,
     "autoRestoreOutput": true,
@@ -180,14 +190,15 @@ await fetch('http://192.168.1.10:7788/api/board', {
     "hotkeys": true,
     "serverAuto": true,
     "mobilePin": "",
-    "tickers": ["每周五 17:00 例会同步进度"]
+    "tickers": ["金宇建安 · 小修作业动态 实时同步"]
   }
 }
 ```
 
-- `columns[].type`：`index`（自动序号）/ `text` / `progress`。
+- `columns[].type`：`text` / `progress`（0–100 画进度条）/ `index`（自动编号，默认不建，需要时在「列设置」里加）。
 - `columns[].width` 为设计宽度，控制台与大屏按同一比例分配，拖列宽两边同步。
-- `layout`：`table` 施工数据表 / `list` 进度榜单。`tickers` 为底部滚动字幕，每行一条。
+- `layout`：`list` 竖向列表（默认，一行一条，状态用颜色标出）/ `table` 整表（多列明细）。`tickers` 为底部滚动字幕，每行一条。
+- `status` 这类文字状态列，大屏会按「待 / 未完」自动归为待办、「完」归为完成，并在列表里标色；换成百分比列则改为进度条。
 - `fontScale`：大屏字号缩放，0.8–1.5。
 - `autoRestoreOutput` + `lastDisplayId`：启动后自动回到上次上屏的那块屏。
 - `hotkeys` / `serverAuto`：全局快捷键、推送接口随软件启动。

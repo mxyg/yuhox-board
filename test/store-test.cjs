@@ -44,9 +44,19 @@ ok('默认设置：开机自启 / 恢复上屏都开着', () => {
   assert.strictEqual(s.mobilePin, '');
 });
 
-ok('默认五列结构', () => {
-  const cols = store.getBoard().columns.map((c) => c.type);
-  assert.deepStrictEqual(cols, ['index', 'text', 'text', 'progress', 'text']);
+ok('默认列结构：金宇建安小修作业 9 列，默认卡片版式', () => {
+  const b = store.getBoard();
+  assert.strictEqual(b.title, '金宇建安小修作业');
+  assert.strictEqual(b.settings.layout, 'list');
+  assert.deepStrictEqual(b.columns.map((c) => c.label), [
+    '小队', '原井号', '施工项目', '区域', '施工进度',
+    '新井号', '新施工项目', '新区域', '备注'
+  ]);
+  assert.strictEqual(b.rows.length, 18);
+  assert.strictEqual(b.rows[0].cells.well, '杜813-34-45');
+  assert.strictEqual(b.rows[0].cells.status, '完井');
+  assert.strictEqual(b.rows[11].cells.status, '下机械堵水管完 待校深');
+  assert.ok(b.dict.job.includes('重新完井'), '默认应带输入历史');
 });
 
 console.log('\n[2] 单格更新（手机遥控用）');
@@ -55,22 +65,26 @@ ok('rowPatch 只改目标单元格', () => {
   const target = before.rows[0];
   const other = before.rows[1];
 
-  const r = store.updateBoard({ rowPatch: { id: target.id, cells: { prog: 88 } } });
+  const r = store.updateBoard({ rowPatch: { id: target.id, cells: { status: '完井 交井' } } });
   assert.strictEqual(r.changed, true);
   const after = r.board;
-  assert.strictEqual(after.rows[0].cells.prog, 88);
-  assert.strictEqual(after.rows[1].cells.prog, other.cells.prog, '别的行不能被动到');
+  assert.strictEqual(after.rows[0].cells.status, '完井 交井');
+  assert.strictEqual(after.rows[1].cells.status, other.cells.status, '别的行不能被动到');
 });
 
-ok('进度值被钳到 0–100', () => {
-  const r = store.updateBoard({ rowPatch: { id: store.getBoard().rows[0].id, cells: { prog: '135%' } } });
-  assert.strictEqual(r.board.rows[0].cells.prog, 100);
-  const r2 = store.updateBoard({ rowPatch: { id: store.getBoard().rows[0].id, cells: { prog: -8 } } });
-  assert.strictEqual(r2.board.rows[0].cells.prog, 0);
+ok('进度列的值被钳到 0–100', () => {
+  const cols = store.getBoard().columns.concat([{ key: 'pct', label: '完成率', type: 'progress', width: 160 }]);
+  store.updateBoard({ columns: cols });
+  const id = store.getBoard().rows[0].id;
+  let r = store.updateBoard({ rowPatch: { id, cells: { pct: '135%' } } });
+  assert.strictEqual(r.board.rows[0].cells.pct, 100);
+  r = store.updateBoard({ rowPatch: { id, cells: { pct: -8 } } });
+  assert.strictEqual(r.board.rows[0].cells.pct, 0);
+  store.updateBoard({ columns: cols.filter((c) => c.key !== 'pct') });
 });
 
 ok('不存在的行 id 不报错也不改数据', () => {
-  const r = store.updateBoard({ rowPatch: { id: 'nope', cells: { prog: 50 } } });
+  const r = store.updateBoard({ rowPatch: { id: 'nope', cells: { status: 'x' } } });
   assert.strictEqual(r.changed, false);
 });
 
@@ -96,7 +110,7 @@ console.log('\n[4] 重置与备份');
 ok('清空数据保留列结构与设置', () => {
   const b = store.resetBoard('empty');
   assert.strictEqual(b.rows.length, 0);
-  assert.strictEqual(b.columns.length, 5);
+  assert.strictEqual(b.columns.length, 9);
   assert.strictEqual(b.settings.mobilePin, '2468');
 });
 

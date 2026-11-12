@@ -138,12 +138,18 @@ async function waitFor(fn, desc, timeout = 4000) {
   await evalIn(cdp, `window.yuhox.setBoard(${JSON.stringify(seedBoard())})`);
   await wait(500);
 
-  // ── HTTP 推送
-  const started = await evalIn(cdp, `window.yuhox.serverStart(${API_PORT})`);
-  assert(!started.error, '推送接口启动失败：' + started.error);
+  // ── HTTP 推送（1.2.0 起服务随软件自启，优先沿用当前端口）
+  const st0 = await evalIn(cdp, 'window.yuhox.getStatus()');
+  let apiPort = st0.server && st0.server.running ? st0.server.port : 0;
+  if (!apiPort) {
+    const started = await evalIn(cdp, `window.yuhox.serverStart(${API_PORT})`);
+    assert(!started.error, '推送接口启动失败：' + started.error);
+    apiPort = API_PORT;
+  }
+  console.log('✅ 推送接口端口：', apiPort);
   const push = { rows: seedBoard().rows.map((r) => ({ id: r.id, cells: { ...r.cells } })) };
   push.rows[0].cells.prog = 80;
-  const pr = await fetch(`http://127.0.0.1:${API_PORT}/api/board`, {
+  const pr = await fetch(`http://127.0.0.1:${apiPort}/api/board`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(push)
   });
   const pj = await pr.json();
@@ -341,5 +347,6 @@ async function waitFor(fn, desc, timeout = 4000) {
   process.exit(0);
 })().catch((e) => {
   console.error('\n❌ E2E 失败：', e.message);
+  if (process.env.E2E_STACK) console.error(e.stack);
   process.exit(1);
 });

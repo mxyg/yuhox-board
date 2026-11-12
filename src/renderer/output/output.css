@@ -604,6 +604,7 @@ body { overflow: hidden; }
   border-radius: calc(var(--u) * 1);
   padding: calc(var(--u) * .95) calc(var(--u) * 1.4);
   min-height: var(--row-h, 0px);
+  flex-shrink: 0;              /* 行高不够时宁可滚动，也不要把两行文字压扁 */
   animation: cardIn .45s cubic-bezier(.22, 1, .36, 1) both;
   position: relative;
   overflow: hidden;
@@ -625,6 +626,99 @@ body { overflow: hidden; }
 .row-ob .card-name { margin: 0; }
 .row-ob .bar { height: calc(var(--u) * .95); }
 .row-ob .pct { min-width: 0; }
+
+/* 拖动排序 */
+.row-ob.dragging { opacity: .45; cursor: grabbing; }
+.row-ob.drop-before { box-shadow: inset 0 2px 0 0 var(--ob-accent2); }
+.row-ob.drop-after { box-shadow: inset 0 -2px 0 0 var(--ob-accent2); }
+.board.list.status-mode .row-ob { cursor: grab; }
+
+/* 状态型榜单：没有百分比，右侧改显示「完井 / 待定 / 未完」这类状态标签 */
+/* 竖向列表：一行一条，井号 + 副信息 + 状态同排，18 条滚起来读着最省眼 */
+.board.list.status-mode .list-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.8);
+}
+.board.list.status-mode .row-ob {
+  grid-template-columns: calc(var(--u) * 2.6) minmax(0, 1fr) auto;
+  gap: calc(var(--u) * 1.4);
+  padding: calc(var(--u) * 0.8) calc(var(--u) * 1.4);
+  background:
+    linear-gradient(100deg, rgba(79, 140, 255, 0.14), rgba(18, 26, 44, 0.68) 52%, rgba(10, 16, 28, 0.5));
+  border-color: rgba(148, 170, 220, 0.14);
+  border-left: calc(var(--u) * 0.28) solid var(--st);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+/* 右侧一圈柔光，避免整行死黑 */
+.board.list.status-mode .row-ob::after {
+  content: "";
+  position: absolute;
+  right: -2%;
+  top: -80%;
+  width: 24%;
+  height: 260%;
+  background: radial-gradient(closest-side, rgba(79, 140, 255, 0.12), transparent 72%);
+  pointer-events: none;
+}
+.board.list.status-mode .row-main {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.6);
+  min-width: 0;
+}
+.board.list.status-mode .row-rank {
+  font-size: calc(var(--u) * 1.5);
+  color: rgba(160, 182, 224, 0.9);
+  text-align: center;
+}
+.board.list.status-mode .card-name {
+  font-size: calc(var(--u) * 1.58);
+  font-weight: 800;
+  letter-spacing: .3px;
+  flex: 0 0 calc(var(--u) * 13.5);
+  max-width: 38%;
+  background: linear-gradient(92deg, #eef5ff, #b7cbf0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board.list.status-mode .row-meta-mini {
+  margin-top: 0;
+  flex: 1 1 auto;
+  gap: calc(var(--u) * 0.6);
+  color: rgba(186, 203, 235, 0.78);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 90%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 90%, transparent 100%);
+}
+.board.list.status-mode .row-meta-mini span {
+  padding: calc(var(--u) * 0.08) calc(var(--u) * 0.55);
+  border-radius: 6px;
+  background: rgba(148, 170, 220, 0.09);
+  border: 1px solid rgba(148, 170, 220, 0.1);
+  font-size: calc(var(--u) * 0.94);
+  white-space: nowrap;
+}
+.pct.pill {
+  min-width: calc(var(--u) * 6);
+  text-align: center;
+  font-size: calc(var(--u) * 1.05);
+  font-weight: 700;
+  letter-spacing: .3px;
+  padding: calc(var(--u) * .3) calc(var(--u) * 1);
+  border-radius: 999px;
+  border: 1px solid rgba(148, 170, 220, 0.22);
+  background: rgba(148, 170, 220, 0.08);
+  color: #dbe6fb;
+  white-space: nowrap;
+}
+.pct.pill.is-done { color: #6ee7b7; border-color: rgba(52, 211, 153, 0.42); background: rgba(52, 211, 153, 0.12); }
+.pct.pill.is-todo { color: #fcd34d; border-color: rgba(251, 191, 36, 0.38); background: rgba(251, 191, 36, 0.12); }
+.pct.pill.is-doing { color: #93c5fd; border-color: rgba(79, 140, 255, 0.42); background: rgba(79, 140, 255, 0.14); }
 .row-meta-mini { display: flex; align-items: center; gap: calc(var(--u) * .7); font-size: calc(var(--u) * 1); color: var(--muted); margin-top: calc(var(--u) * .3); }
 .row-meta-mini:empty { display: none; }
 
@@ -681,7 +775,12 @@ body { overflow: hidden; }
 }
 .th.index { justify-content: center; }
 
-.tbl-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+.tbl-body {
+  flex: 1; min-height: 0; overflow: hidden; position: relative;
+  /* 上下边缘淡出：滚动时半截行不会硬切在表头/字幕条上 */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16px, #000 calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 16px, #000 calc(100% - 20px), transparent 100%);
+}
 .tbl-scroll { display: flex; flex-direction: column; }
 
 .tr {

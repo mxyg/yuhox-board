@@ -47,36 +47,76 @@ function uid(prefix) {
 
 function defaultColumns() {
   return [
-    { key: 'idx', label: '序号', type: 'index', width: 60, visible: true },
-    { key: 'team', label: '施工队伍', type: 'text', width: 150, visible: true },
-    { key: 'act', label: '施工动态', type: 'text', width: 290, visible: true },
-    { key: 'prog', label: '施工进度', type: 'progress', width: 190, visible: true },
-    { key: 'proc', label: '施工工序', type: 'text', width: 130, visible: true }
+    { key: 'team', label: '小队', type: 'text', width: 96, visible: true },
+    { key: 'well', label: '原井号', type: 'text', width: 150, visible: true },
+    { key: 'job', label: '施工项目', type: 'text', width: 120, visible: true },
+    { key: 'zone', label: '区域', type: 'text', width: 92, visible: true },
+    { key: 'status', label: '施工进度', type: 'text', width: 232, visible: true },
+    { key: 'newWell', label: '新井号', type: 'text', width: 150, visible: true },
+    { key: 'newJob', label: '新施工项目', type: 'text', width: 120, visible: true },
+    { key: 'newZone', label: '新区域', type: 'text', width: 92, visible: true },
+    { key: 'note', label: '备注', type: 'text', width: 84, visible: true }
   ];
 }
 
+/**
+ * 默认数据：金宇建安小修作业表（2026-11-12）
+ * 列顺序：小队 / 原井号 / 施工项目 / 区域 / 施工进度 / 新井号 / 新施工项目 / 新区域 / 备注
+ */
+const DEFAULT_TABLE = [
+  ['1', '杜813-34-45', '热采', '欢采', '完井', '杜813-40-33', '下泵', '欢采', '三级'],
+  ['2', '锦2-丙6-A116', '堵水补层', '锦采', '下射孔管完 待校深', '锦2-7-A236', '解堵', '锦采', '三级'],
+  ['3', '杜80-28-66C', '测固井质量', '1区新9', '起探砂管完', '', '', '', '二级'],
+  ['4', '杜80-28-K54', '热采', '1区新5', '完井', '杜80-28-52', '热采', '1区新5', '三级'],
+  ['5', '曙1-52-020', '热采', '3区46', '完井', '曙1-107-204', '热采', '1区新2', '二级'],
+  ['6', '曙1-39-31', '检泵', '3区16', '下杆5根', '曙1-49-034', '下泵', '3区47', '二级'],
+  ['7', '曙2-04-04', '转抽', '2区1', '下泵管完 油管压力1.2MPa', '待定', '', '', '三级'],
+  ['8', '曙1-46-29CR', '检泵', '3区37', '完井', '曙1-44-046R', '下泵', '3区31', '三级'],
+  ['9', '曙1-06-15', '热采', '2区34', '完井', '曙1-50-025', '下泵', '3区42', '三级'],
+  ['10', '曙1-50-034', '检隔热管', '3区47', '套铣未完 H:909.90m', '', '', '', '二级'],
+  ['11', '曙1-37-K40', '热采', '3区54', '起泵管80根', '曙1-35-56', '下泵', '3区36', '三级'],
+  ['12', '曙2-07-015', '测压下泵', '2区6', '下机械堵水管完 待校深', '曙2-06-06', '机械堵水', '2区6', '四级'],
+  ['大修1', '杜212-23-293', '重新完井', '5区89', '固井 候凝', '', '', '', '三级'],
+  ['大修2', '静67-163', '解卡打捞', '沈采', '套铣 打捞', '', '', '', '三级'],
+  ['大修3队', '杜813-44-56', '重新完井', '6区新3', '设备安装', '', '', '', '三级'],
+  ['大修4队', '茨14-153', '重新完井', '茨采', '等搬迁', '茨9-13-3', '重新完井', '茨采', '三级'],
+  ['大修5队', '茨631-2', '重新完井', '茨采', '定向钻进 起钻头未完', '', '', '', '三级'],
+  ['大修6队', '杜125', '弃置井封井', '2区23', '保养设备 看井', '', '', '', '三级']
+];
+
+const DEFAULT_KEYS = ['team', 'well', 'job', 'zone', 'status', 'newWell', 'newJob', 'newZone', 'note'];
+
 function defaultRows() {
-  return [
-    { id: 'r1', cells: { team: '一号施工队', act: '三层顶板钢筋绑扎', prog: 72, proc: '钢筋工程' } },
-    { id: 'r2', cells: { team: '二号施工队', act: '地下室剪力墙模板安装', prog: 55, proc: '模板工程' } },
-    { id: 'r3', cells: { team: '机电班', act: '一层桥架敷设与穿线', prog: 38, proc: '机电安装' } },
-    { id: 'r4', cells: { team: '三号施工队', act: '二层梁板混凝土浇筑', prog: 100, proc: '混凝土工程' } },
-    { id: 'r5', cells: { team: '防水班', act: '屋面防水卷材铺贴', prog: 20, proc: '防水工程' } },
-    { id: 'r6', cells: { team: '四号施工队', act: '外脚手架搭设与验收', prog: 88, proc: '脚手架工程' } },
-    { id: 'r7', cells: { team: '机电班', act: '消防管道压力试验', prog: 0, proc: '消防工程' } },
-    { id: 'r8', cells: { team: '二号施工队', act: '四层砌体工程样板段', prog: 46, proc: '砌体工程' } }
-  ];
+  return DEFAULT_TABLE.map((r, i) => {
+    const cells = {};
+    DEFAULT_KEYS.forEach((k, j) => { if (r[j]) cells[k] = r[j]; });
+    return { id: 'r' + (i + 1), cells };
+  });
+}
+
+/** 默认输入历史：开箱即用的下拉候选，取自默认表里出现过的值 */
+function defaultDict() {
+  const uniq = (key) => {
+    const i = DEFAULT_KEYS.indexOf(key);
+    return Array.from(new Set(DEFAULT_TABLE.map((r) => r[i]).filter(Boolean)));
+  };
+  return {
+    team: uniq('team'), well: uniq('well'), job: uniq('job'),
+    zone: uniq('zone'), status: uniq('status'),
+    newWell: uniq('newWell'), newJob: uniq('newJob'),
+    newZone: uniq('newZone'), note: ['三级', '二级', '四级', '一级']
+  };
 }
 
 function sampleBoard() {
   return {
     version: 2,
-    title: '施工动态总览',
-    subtitle: 'YUHOX · 现场实时进度',
+    title: '金宇建安小修作业',
+    subtitle: '现场实时进度 · 实时更新',
     updatedAt: 0,
     columns: defaultColumns(),
     rows: defaultRows(),
-    dict: {},
+    dict: defaultDict(),
     settings: {
       accent: '#4f8cff',
       accent2: '#22d3ee',
@@ -85,7 +125,7 @@ function sampleBoard() {
       zebra: true,
       autoScroll: true,
       scrollSpeed: 36,          // px/s，内容溢出时的自动滚动速度
-      layout: 'table',          // table(施工数据表) | list(进度榜单)
+      layout: 'list',           // list(卡片看板，默认最好看) | table(整表)
       fontScale: 1,             // 大屏字号缩放
       autoLaunch: true,         // 开机自动启动（默认开）
       autoRestoreOutput: true,  // 启动后自动回到上次上屏的那块屏
@@ -93,7 +133,7 @@ function sampleBoard() {
       hotkeys: true,            // 全局快捷键
       serverAuto: true,         // 随软件启动推送接口（手机遥控要用）
       mobilePin: '',            // 手机遥控页口令，空 = 不校验
-      tickers: ['数据实时同步 · 支持控制台编辑 / HTTP 推送 / Excel 导入']
+      tickers: ['金宇建安 · 小修作业动态 实时同步（控制台 / 手机 / Excel）', '每日 18:00 前上报当日完井与待定井情况']
     }
   };
 }
@@ -188,8 +228,19 @@ function normalizeDict(dict) {
 }
 
 /** v1 → v2 迁移：旧任务字段映射成默认五列 */
+/** 1.x 时代的老五列，只用于迁移旧数据，保留原样不再新增 */
+function legacyColumns() {
+  return [
+    { key: 'idx', label: '序号', type: 'index', width: 60, visible: true },
+    { key: 'team', label: '施工队伍', type: 'text', width: 150, visible: true },
+    { key: 'act', label: '施工动态', type: 'text', width: 290, visible: true },
+    { key: 'prog', label: '施工进度', type: 'progress', width: 190, visible: true },
+    { key: 'proc', label: '施工工序', type: 'text', width: 130, visible: true }
+  ];
+}
+
 function migrateLegacy(parsed) {
-  const columns = defaultColumns();
+  const columns = legacyColumns();
   const tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
   const rows = tasks.map((t, i) => ({
     id: String(t.id || ('r' + (i + 1))),
@@ -204,7 +255,7 @@ function migrateLegacy(parsed) {
   if (settings.layout === 'columns') settings.layout = 'table';
   return {
     version: 2,
-    title: parsed.title || '施工动态总览',
+    title: parsed.title || sampleBoard().title,
     subtitle: parsed.subtitle || '',
     updatedAt: parsed.updatedAt || 0,
     columns,

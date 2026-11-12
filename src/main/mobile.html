@@ -109,20 +109,36 @@
     100% { box-shadow: 0 0 0 14px rgba(52, 211, 153, 0); }
   }
   .row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .row-head .name {
+    font-size: 14px; font-weight: 700; color: var(--txt);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .idx {
     min-width: 24px; height: 24px; padding: 0 7px; border-radius: 7px;
     background: rgba(79, 140, 255, .16); color: #9dc0ff;
     font-size: 12px; font-weight: 700; display: grid; place-items: center;
   }
   .row-head .badge {
-    margin-left: auto; font-size: 12px; font-weight: 650;
-    color: var(--st, var(--accent));
+    margin-left: auto; font-size: 12.5px; font-weight: 700;
+    color: var(--st, var(--accent)); white-space: nowrap;
+    max-width: 55%; overflow: hidden; text-overflow: ellipsis;
   }
 
-  .cells { display: grid; gap: 10px; }
-  .cell { display: grid; gap: 5px; }
+  /* 短字段两列并排，长字段独占一行，一屏能多看几条 */
+  .cells { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; grid-auto-flow: row dense; }
+  .cell { display: grid; gap: 5px; min-width: 0; }
+  .cell.wide { grid-column: 1 / -1; }
   .cell label { font-size: 11.5px; color: var(--dim); letter-spacing: .2px; }
   .cell input { padding: 11px 12px; font-size: 15px; }
+
+  /* 状态快捷标签：常填的几个值一点即填 */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip {
+    padding: 8px 12px; font-size: 13px; border-radius: 999px;
+    border: 1px solid var(--line); background: #0d1524; color: #cfe0ff;
+    font-family: inherit;
+  }
+  .chip:active { background: #1a2740; transform: scale(.97); }
 
   /* 进度控件 */
   .prog { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
@@ -301,6 +317,9 @@ function renderRows() {
   const cols = visibleCols();
   const textCols = cols.filter((c) => c.type !== 'index' && c.type !== 'progress');
   const progCol = cols.find((c) => c.type === 'progress');
+  const statusCol = textCols.find((c) => /进度|状态|情况/.test(c.label)) || null;
+  const nameCol = textCols.find((c) => /井号|编号|名称/.test(c.label)) || textCols[0] || null;
+  const dict = (board && board.dict) || {};
   const list = $('#list');
   const rows = (board && board.rows) || [];
 
@@ -314,24 +333,55 @@ function renderRows() {
   const focusedKey = active && active.dataset ? active.dataset.focusKey : null;
   const caret = active && active.selectionStart;
 
+  // 快捷标签：取当前数据里最常用的 5 个状态（同频取短的，免得按钮太长）
+  let chipPool = [];
+  if (statusCol) {
+    const freq = {};
+    rows.forEach((r) => {
+      const v = String((r.cells || {})[statusCol.key] || '').trim();
+      if (v) freq[v] = (freq[v] || 0) + 1;
+    });
+    chipPool = Object.keys(freq)
+      .sort((a, b) => freq[b] - freq[a] || a.length - b.length)
+      .slice(0, 5);
+  }
+
   list.innerHTML = rows.map((r, i) => {
     const cells = r.cells || {};
     const pv = progCol ? Number(cells[progCol.key]) || 0 : 0;
-    const fields = textCols.map((c) => `
-      <div class="cell">
+    const stxt = statusCol ? String(cells[statusCol.key] || '').trim() : '';
+    const st = progCol ? statusColor(pv)
+      : (/待|未完/.test(stxt) ? '#fbbf24' : /完/.test(stxt) ? '#34d399' : 'var(--accent)');
+
+    const fields = textCols.map((c) => {
+      const v = String(cells[c.key] || '');
+      const wide = v.length > 12 || /施工进度|说明|原因|动态/.test(c.label);
+      return `
+      <div class="cell${wide ? ' wide' : ''}">
         <label>${esc(c.label)}</label>
         <input type="text" data-id="${esc(r.id)}" data-key="${esc(c.key)}"
                data-focus-key="${esc(r.id + ':' + c.key)}"
-               value="${esc(cells[c.key])}" placeholder="${esc(c.label)}" />
-      </div>`).join('');
+               value="${esc(v)}" placeholder="${esc(c.label)}" />
+      </div>`;
+    }).join('');
+
+    const chips = chipPool.length
+      ? `<div class="chips">${chipPool.map((v) =>
+          `<button class="chip" data-set="${esc(v)}" data-id="${esc(r.id)}" data-key="${esc(statusCol.key)}">${esc(v)}</button>`).join('')}</div>`
+      : '';
+
+    const badge = statusCol ? stxt : (progCol ? pv + '%' : '');
+    const headName = nameCol ? String(cells[nameCol.key] || '') : '';
 
     return `
-      <section class="row" data-row="${esc(r.id)}" style="--st:${progCol ? statusColor(pv) : 'var(--accent)'}">
+      <section class="row" data-row="${esc(r.id)}" style="--st:${st}">
         <div class="row-head">
           <span class="idx">${i + 1}</span>
-          <span class="badge">${progCol ? pv + '%' : ''}</span>
+          <span class="name">${esc(headName)}</span>
+          <span class="badge">${esc(badge)}</span>
         </div>
         <div class="cells">${fields}</div>
+        ${chips}
         ${progCol ? `
         <div class="cell" style="margin-top:10px">
           <label>${esc(progCol.label)}</label>
@@ -402,6 +452,24 @@ $('#list').addEventListener('input', (e) => {
 });
 
 $('#list').addEventListener('click', (e) => {
+  // 状态快捷标签：一点即填
+  const chip = e.target.closest('button[data-set]');
+  if (chip) {
+    const id = chip.dataset.id;
+    const key = chip.dataset.key;
+    const val = chip.dataset.set;
+    const row = (board.rows || []).find((r) => r.id === id);
+    if (row) {
+      row.cells[key] = val;
+      const inp = document.querySelector(`[data-focus-key="${CSS.escape(id + ':' + key)}"]`);
+      if (inp) inp.value = val;
+      const badge = document.querySelector(`.row[data-row="${CSS.escape(id)}"] .badge`);
+      if (badge) badge.textContent = val;
+      queuePatch(id, key, val);
+    }
+    return;
+  }
+
   const btn = e.target.closest('button[data-step]');
   if (!btn) return;
   const id = btn.dataset.id;

@@ -17,6 +17,7 @@ let current = null;
 let lastKpi = { total: 0, doing: 0, done: 0, overall: 0, teams: 0 };
 const knownRows = new Set();
 const marquees = [];
+let marqueeHold = false;        // 拖动排序时先别滚，否则抓不住行
 const lastCells = new Map();     // rid → { colKey: value } 用于判断内容变化
 const previewMode = new URLSearchParams(location.search).has('preview');
 
@@ -161,6 +162,12 @@ function teamColumn(b) {
     texts.find((c) => c.key === 'team') || texts[0] || null;
 }
 
+/** 文本型「施工进度」列：真实现场多是「完井 / 下泵管完 待校深 / 套铣未完」这种状态文字 */
+function statusColumn(b) {
+  const texts = b.columns.filter((c) => c.type === 'text' && c.visible !== false);
+  return texts.find((c) => /进度|状态|情况/.test(c.label)) || null;
+}
+
 function computeKpi(b) {
   const rows = b.rows || [];
   const pcol = b.columns.find((c) => c.type === 'progress' && c.visible !== false);
@@ -170,18 +177,41 @@ function computeKpi(b) {
     ? new Set(rows.map((r) => String(r.cells[teamCol.key] || '').trim()).filter(Boolean)).size
     : 0;
 
-  if (!pcol) {
-    return { total: rows.length, doing: 0, done: 0, overall: 0, teams, hasProgress: false };
+  if (pcol) {
+    const vals = rows.map((r) => Number(r.cells[pcol.key]) || 0);
+    return {
+      total: rows.length,
+      doing: vals.filter((v) => v > 0 && v < 100).length,
+      done: vals.filter((v) => v >= 100).length,
+      todo: 0,
+      overall: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0,
+      teams,
+      mode: 'progress'
+    };
   }
-  const vals = rows.map((r) => Number(r.cells[pcol.key]) || 0);
-  return {
-    total: rows.length,
-    doing: vals.filter((v) => v > 0 && v < 100).length,
-    done: vals.filter((v) => v >= 100).length,
-    overall: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0,
-    teams,
-    hasProgress: true
-  };
+
+  // 没有百分比列时，按状态文字归类：含「待 / 未完」算待办，其余含「完」算完成
+  const scol = statusColumn(b);
+  if (scol) {
+    let done = 0, todo = 0;
+    for (const r of rows) {
+      const v = String(r.cells[scol.key] || '').trim();
+      if (!v) continue;
+      if (/待|未完/.test(v)) todo++;
+      else if (/完/.test(v)) done++;
+    }
+    return {
+      total: rows.length,
+      doing: Math.max(0, rows.length - done - todo),
+      done,
+      todo,
+      overall: rows.length ? Math.round((done / rows.length) * 100) : 0,
+      teams,
+      mode: 'status'
+    };
+  }
+
+  return { total: rows.length, doing: 0, done: 0, todo: 0, overall: 0, teams, mode: 'plain' };
 }
 
 function renderKpi(kpi) {
@@ -193,12 +223,13 @@ function renderKpi(kpi) {
   const cardRing = $('[data-kpi="overall"]');
   const cardTeams = $('#kpiTeamsCard');
 
-  if (kpi.hasProgress) {
+  if (kpi.mode !== 'plain') {
     cardDoing.style.display = '';
     cardDone.style.display = '';
     cardRing.style.display = '';
     cardTeams.style.display = 'none';
     $('#kpi').style.gridTemplateColumns = '';
+    $('#kpiRingLabel').textContent = kpi.mode === 'status' ? '完成率' : '平均进度';
 
     tweenNumber($('#kpiDoing'), lastKpi.doing, kpi.doing);
     tweenNumber($('#kpiDone'), lastKpi.done, kpi.done);
@@ -214,7 +245,7 @@ function renderKpi(kpi) {
     cardDone.style.display = 'none';
     cardRing.style.display = 'none';
     cardTeams.style.display = '';
-    $('#kpi').style.gridTemplateColumns = 'repeat(2, 1fr)';
+    $('#kpi').style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
     $('[data-kpi="total"] .kpi-spark i').style.width = '100%';
     cardTeams.querySelector('.kpi-spark i').style.width = '100%';
   }
@@ -314,6 +345,7 @@ function renderTable(b) {
   const rows = b.rows || [];
   const primary = primaryTextKey(cols);
   const pcol = cols.find((c) => c.type === 'progress') || null;
+  const scol = pcol ? null : (cols.find((c) => c.type === 'text' && /进度|状态|情况/.test(c.label)) || null);
 
   const existing = new Map();
   for (const el of [...scroll.children]) {
@@ -352,8 +384,13 @@ function renderTable(b) {
     });
     lastCells.set(r.id, now);
     // 行首光条跟随进度状态：完成变绿，其余用主题色
-    const pv = pcol ? Number(r.cells[pcol.key]) || 0 : 0;
-    el.style.setProperty('--st', pcol && pv >= 100 ? 'var(--st-done)' : 'var(--ob-accent)');
+    let done = false;
+    if (pcol) done = (Number(r.cells[pcol.key]) || 0) >= 100;
+    else if (scol) {
+      const v = String(r.cells[scol.key] || '');
+      done = /完/.test(v) && !/待|未完/.test(v);
+    }
+    el.style.setProperty('--st', done ? 'var(--st-done)' : 'var(--ob-accent)');
 
     if (isNew && knownRows.size > 0) {
       el.classList.add('glow');
@@ -376,12 +413,12 @@ function renderTable(b) {
 }
 
 /** 行数少时把行高撑开铺满可视区，避免大屏下方一大片空白 */
-function stretchRows(scroll, n, gapPx = 0) {
+function stretchRows(scroll, n, gapPx = 0, minU = 3.2, maxU = 7.4) {
   const body = scroll.parentElement;
   if (!body || !n) return;
   const base = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 14;
   const usable = body.clientHeight - gapPx * (n - 1);
-  const h = Math.max(base * 3.2, Math.min(base * 7.4, usable / n));
+  const h = Math.max(base * minU, Math.min(base * maxU, usable / n));
   scroll.style.setProperty('--row-h', Math.round(h) + 'px');
 }
 
@@ -391,10 +428,17 @@ function renderList(b) {
   const cols = visibleColumns(b);
   const pcol = cols.find((c) => c.type === 'progress');
   const texts = cols.filter((c) => c.type === 'text');
-  const nameCol = texts[0] || null;
-  const metaCols = texts.slice(1, 3);
+  const scol = pcol ? null : (texts.find((c) => /进度|状态|情况/.test(c.label)) || null);
+  const nameCol =
+    texts.find((c) => /井号|编号|名称|标题|主体/.test(c.label)) ||
+    texts.find((c) => /队伍|班组|单位|施工队/.test(c.label)) ||
+    texts[0] || null;
 
-  if (!pcol || !nameCol) { renderTable(b); return; }
+  // 两种榜单：有百分比列按进度排序；没有则按状态文字（待办 → 进行 → 完成）排序
+  if (!nameCol || (!pcol && !scol)) { renderTable(b); return; }
+  const statusMode = !pcol;
+  // 16:9 横屏空间够，副信息多放几项（小队 / 项目 / 区域 / 新井号…）
+  const metaCols = texts.filter((c) => c !== nameCol && c !== scol).slice(0, statusMode ? 8 : 3);
 
   if (boardEl.dataset.mode !== 'list') {
     boardEl.className = 'board list';
@@ -403,14 +447,24 @@ function renderList(b) {
     knownRows.clear();
     lastCells.clear();
   }
+  boardEl.classList.toggle('status-mode', statusMode);
 
-  const rows = [...(b.rows || [])].sort((a, c) =>
-    (Number(c.cells[pcol.key]) || 0) - (Number(a.cells[pcol.key]) || 0));
+  const kind = (v) => {
+    const s = String(v || '');
+    if (/待|未完/.test(s)) return 0;
+    if (/完/.test(s)) return 2;
+    return 1;
+  };
+  // 有百分比列时按进度排序；状态型列表按用户自己的顺序（拖动排序即改这个顺序）
+  const rows = statusMode
+    ? [...(b.rows || [])]
+    : [...(b.rows || [])].sort((a, c) => (Number(c.cells[pcol.key]) || 0) - (Number(a.cells[pcol.key]) || 0));
 
   const scroll = boardEl.querySelector('.list-scroll');
   const existing = new Map();
   for (const el of [...scroll.children]) if (el.dataset.rid) existing.set(el.dataset.rid, el);
   const keep = new Set();
+  bindListDrag(scroll);
 
   rows.forEach((r, i) => {
     keep.add(r.id);
@@ -420,25 +474,41 @@ function renderList(b) {
       el = document.createElement('div');
       el.className = 'row-ob';
       el.dataset.rid = r.id;
+      el.draggable = true;
       el.innerHTML =
         '<div class="row-rank"></div>' +
         '<div class="row-main"><div class="card-name"></div><div class="row-meta-mini"></div></div>' +
         '<div class="bar"><i></i></div><div class="pct"></div>';
       scroll.appendChild(el);
     }
-    el.classList.toggle('top1', i === 0);
-    el.classList.toggle('top2', i === 1);
-    el.classList.toggle('top3', i === 2);
+    el.classList.toggle('top1', !statusMode && i === 0);
+    el.classList.toggle('top2', !statusMode && i === 1);
+    el.classList.toggle('top3', !statusMode && i === 2);
     el.querySelector('.row-rank').textContent = i + 1;
     el.querySelector('.card-name').textContent = r.cells[nameCol.key] || '—';
     el.querySelector('.row-meta-mini').innerHTML = metaCols
       .map((c) => `<span>${escapeHtml(r.cells[c.key] || '')}</span>`)
       .filter((s) => s !== '<span></span>').join('');
-    const n = Math.max(0, Math.min(100, Number(r.cells[pcol.key]) || 0));
-    const bar = el.querySelector('.bar i');
-    bar.style.width = n + '%';
-    bar.classList.toggle('done-stop', n >= 100);
-    el.querySelector('.pct').textContent = n + '%';
+
+    const pct = el.querySelector('.pct');
+    const bar = el.querySelector('.bar');
+    if (statusMode) {
+      const txt = String(r.cells[scol.key] || '').trim();
+      const k = kind(txt);
+      bar.style.display = 'none';
+      pct.className = 'pct pill ' + (k === 2 ? 'is-done' : k === 0 ? 'is-todo' : 'is-doing');
+      pct.textContent = txt || '—';
+      el.style.setProperty('--st', k === 2 ? 'var(--st-done)' : 'var(--ob-accent)');
+      el.classList.toggle('is-done-row', k === 2);
+    } else {
+      const n = Math.max(0, Math.min(100, Number(r.cells[pcol.key]) || 0));
+      bar.style.display = '';
+      pct.className = 'pct';
+      bar.style.width = n + '%';
+      bar.classList.toggle('done-stop', n >= 100);
+      pct.textContent = n + '%';
+      el.classList.remove('is-done-row');
+    }
     scroll.appendChild(el);
     knownRows.add(r.id);
   });
@@ -451,7 +521,82 @@ function renderList(b) {
     }
   }
 
-  stretchRows(scroll, rows.length, (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 14) * 0.9);
+  // 榜单一行一条，最低 3.4u，挤不下就滚动
+  stretchRows(scroll, rows.length,
+    (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 14) * 0.8,
+    3.4, 6.4);
+}
+
+/** 拖动列表行改顺序：松手即落库，控制台与大屏一起变 */
+function reorderRows(fromId, toId, after) {
+  if (!current || !Array.isArray(current.rows) || fromId === toId) return;
+  const rows = current.rows.slice();
+  const from = rows.findIndex((r) => r.id === fromId);
+  if (from < 0) return;
+  const [moved] = rows.splice(from, 1);
+  let idx = rows.findIndex((r) => r.id === toId);
+  if (idx < 0) return;
+  if (after) idx += 1;
+  rows.splice(idx, 0, moved);
+  if (window.yuhox) window.yuhox.setBoard({ rows });
+}
+
+function bindListDrag(scroll) {
+  if (scroll.dataset.dragBound) return;
+  scroll.dataset.dragBound = '1';
+  let dragId = null;
+
+  const clearMarks = () => {
+    scroll.querySelectorAll('.drop-before, .drop-after').forEach((n) => {
+      n.classList.remove('drop-before', 'drop-after');
+    });
+  };
+  const end = () => {
+    dragId = null;
+    marqueeHold = false;
+    clearMarks();
+    scroll.querySelectorAll('.dragging').forEach((n) => n.classList.remove('dragging'));
+  };
+
+  scroll.addEventListener('dragstart', (e) => {
+    const row = e.target.closest('.row-ob');
+    if (!row || !window.yuhox) return;
+    dragId = row.dataset.rid;
+    row.classList.add('dragging');
+    marqueeHold = true;                 // 拖动时先停滚
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
+  });
+
+  scroll.addEventListener('dragover', (e) => {
+    if (!dragId) return;
+    const row = e.target.closest('.row-ob');
+    if (!row) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = row.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    clearMarks();
+    if (row.dataset.rid !== dragId) row.classList.add(after ? 'drop-after' : 'drop-before');
+  });
+
+  scroll.addEventListener('drop', (e) => {
+    if (!dragId) return;
+    const row = e.target.closest('.row-ob');
+    if (!row) return;
+    e.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    const from = dragId;
+    const to = row.dataset.rid;
+    end();
+    reorderRows(from, to, after);
+  });
+
+  scroll.addEventListener('dragend', end);
+  scroll.addEventListener('dragleave', (e) => {
+    if (!scroll.contains(e.relatedTarget)) clearMarks();
+  });
 }
 
 function renderEmpty() {
@@ -476,7 +621,9 @@ function stopMarquees() {
 function setupMarquees(speedSetting) {
   stopMarquees();
   if (!current.settings.autoScroll) return;
-  const wrappers = boardEl.querySelectorAll('.col-body, .board.list, .tbl-body');
+  const wrappers = [...boardEl.querySelectorAll('.col-body, .tbl-body')];
+  // 列表版式里 boardEl 自己就是滚动容器，querySelectorAll 选不到自身，得单独加进来
+  if (boardEl.classList.contains('list')) wrappers.push(boardEl);
   wrappers.forEach((wrap) => {
     const inner = wrap.querySelector('.col-scroll, .list-scroll, .tbl-scroll');
     if (!inner || inner.scrollHeight <= wrap.clientHeight + 4) return;
@@ -491,15 +638,17 @@ function setupMarquees(speedSetting) {
     const m = { raf: 0 };
     const state = { y: 0 };
     let lastT = 0;
+    // 首尾相接：整段滚完要跨过「列表之间的间距」，否则每次循环会跳一下
+    const gap = parseFloat(getComputedStyle(wrap).rowGap || getComputedStyle(wrap).gap) || 0;
+    const loop = inner.scrollHeight + gap;
 
     // 按真实时间推进（而不是按帧计数），窗口被节流时速度也一致
     function frame(t) {
       const dt = lastT ? Math.min(400, t - lastT) : 16.7;
       lastT = t;
-      if (t > pauseUntil) {
+      if (t > pauseUntil && !marqueeHold) {
         state.y += pxPerMs * dt;
-        const half = inner.scrollHeight;
-        if (state.y >= half) state.y -= half;
+        if (state.y >= loop) state.y -= loop;
         inner.style.transform = `translateY(${-state.y}px)`;
         dup.style.transform = `translateY(${-state.y}px)`;
       }
